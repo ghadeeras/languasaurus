@@ -1,0 +1,28 @@
+export declare type Equality<T> = (v1: T, v2: T) => boolean;
+export declare type Comparator<T> = (v1: T, v2: T) => number;
+export declare type Reducer<A, B> = (a: A, b: B) => A;
+export declare type Getter<A, B> = (a: A) => B;
+export declare type Mapper<A, B> = (a: A, i: number) => B;
+export declare type Consumer<T> = (v: T) => void;
+export declare type Pair<K, V> = {
+    key: K;
+    value: V;
+};
+export declare function pair<K, V>(key: K, value: V): Pair<K, V>;
+export declare function distinctFunction<T>(comparator: Comparator<T>): Getter<T[], T[]>;
+export declare function distinct<T>(array: T[], comparator: Comparator<T>): T[];
+export declare function groupFunction<T, K, V>(key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>): Getter<T[], Pair<K, V[]>[]>;
+export declare function group<T, K, V>(array: T[], key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>): Pair<K, V[]>[];
+export declare function aggregateFunction<K, V, R>(keyComparator: Comparator<K>, aggregateIdentity: Getter<K, R>, aggregateReducer: Reducer<R, V>): Getter<Pair<K, V>[], Pair<K, R>[]>;
+export declare function aggregate<T, K, V, R>(array: T[], key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>, aggregateIdentity: Getter<K, R>, aggregateReducer: Reducer<R, V>): Pair<K, R>[];
+export declare function removeFirst<T>(toRemove: T, array: T[], comparator: Comparator<T>): T[];
+export declare const numberComparator: Comparator<number>;
+export declare function arrayComparator<T>(comparator: Comparator<T>): Comparator<T[]>;
+export declare function comparing<A, B>(getter: Getter<A, B>, comparator: Comparator<B>): Comparator<A>;
+export declare function comparingBy<A>(...comparators: Comparator<A>[]): Comparator<A>;
+export declare function flatten<T>(array: T[][]): T[];
+export declare function flatMap<I, O>(array: I[], mapper: Mapper<I, O[]>): O[];
+export declare function unique<T>(values: T[]): T[];
+export declare function append<V>(group: V[], v: V): V[];
+export declare function randomInt(max: number): number;
+export declare function bug<T>(): T;
