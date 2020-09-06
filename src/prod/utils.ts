@@ -1,7 +1,9 @@
+export type Equality<T> = (v1: T, v2: T) => boolean;
 export type Comparator<T> = (v1: T, v2: T) => number;
 export type Reducer<A, B> = (a: A, b: B) => A;
 export type Getter<A, B> = (a: A) => B;
 export type Mapper<A, B> = (a: A, i: number) => B;
+export type Consumer<T> = (v: T) => void
 
 export type Pair<K, V> = {
     key: K;
@@ -49,6 +51,8 @@ export function removeFirst<T>(toRemove: T, array: T[], comparator: Comparator<T
     return index >= 0 ? array.slice(0, index).concat(array.slice(index + 1)) :  array;
 }
 
+export const numberComparator: Comparator<number> = (v1, v2) => v1 - v2;
+
 export function arrayComparator<T>(comparator: Comparator<T>): Comparator<T[]> {
     return (array1, array2) => {
         const minLength = Math.min(array1.length, array2.length);
@@ -67,6 +71,18 @@ export function comparing<A, B>(getter: Getter<A, B>, comparator: Comparator<B>)
     return (a1, a2) => comparator(getter(a1), getter(a2))
 }
 
+export function comparingBy<A>(...comparators: Comparator<A>[]): Comparator<A> {
+    return (a1, a2) => {
+        for (let comparator of comparators) {
+            const diff = comparator(a1, a2)
+            if (diff != 0) {
+                return diff
+            }
+        }
+        return 0
+    }
+}
+
 export function flatten<T>(array: T[][]): T[] {
     return flatMap(array, v => v);
 }
@@ -76,3 +92,14 @@ export function flatMap<I, O>(array: I[], mapper: Mapper<I, O[]>): O[] {
     array.map(mapper).forEach(os => os.forEach(o => result.push(o)));
     return result;
 }
+
+export function unique<T>(values: T[]): T[] {
+    const vs: T[] = []
+    for (let v of values) {
+        if (vs.indexOf(v) < 0) {
+            vs.push(v)
+        }
+    }
+    return vs
+}
+

@@ -77,16 +77,26 @@ export function complement(set: CharSet): CharSet {
     return charSet(limits);
 }
 
+const rangeComparator: utils.Comparator<Range> = utils.comparingBy(
+    utils.comparing(r => r.min, utils.numberComparator),
+    utils.comparing(r => r.max, utils.numberComparator),
+)
+
+const charSetComparator: utils.Comparator<CharSet> = utils.comparing(set => set.ranges, utils.arrayComparator(rangeComparator))
+
+export function identical(set1: CharSet, set2: CharSet): boolean {
+    return charSetComparator(set1, set2) == 0
+}
+
 export type Overlap = utils.Pair<number[], CharSet>;
 
 type IndexedLimit = utils.Pair<number, RangeLimit>;
-const numberComparator: utils.Comparator<number> = (v1, v2) => v1 - v2;
 const setsAppender: utils.Reducer<CharSet[], CharSet> = (sets, set) => {
     sets.push(set);
     return sets;
 };
-const distinct = utils.distinctFunction(numberComparator);
-const aggregate = utils.aggregateFunction(utils.arrayComparator(numberComparator), () => [], setsAppender);
+const distinct = utils.distinctFunction(utils.numberComparator);
+const aggregate = utils.aggregateFunction(utils.arrayComparator(utils.numberComparator), () => [], setsAppender);
 
 export function computeOverlaps(...sets: CharSet[]): Overlap[] {
     const result: Overlap[] = [];
@@ -113,7 +123,7 @@ export function computeOverlaps(...sets: CharSet[]): Overlap[] {
         }
         lastLimit = limit.value;
         if (limit.value.upper) {
-            ids = utils.removeFirst(limit.key, ids, numberComparator);
+            ids = utils.removeFirst(limit.key, ids, utils.numberComparator);
         } else {
             ids.push(limit.key);
         }
