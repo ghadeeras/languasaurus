@@ -5,27 +5,39 @@ export interface Matcher<R> {
 
     match(char: number): R[] | null
 
+    randomMatch(): utils.Pair<number, R[]> | null
+
 }
 
 type StateCloner<R> = utils.Mapper<State<R>, State<R>>
 
 export class Automaton<R> {
 
+    readonly states: State<R>[]
     readonly startState: State<R>
     readonly transientStates: State<R>[]
     readonly finalStates: State<R>[]
 
-    private constructor(readonly states: State<R>[]) {
+    private constructor(states: State<R>[]) {
+        this.states = utils.unique(states)
         this.startState = this.states[0]
         this.transientStates = this.states.filter(state => state.isTransient)
         this.finalStates = this.states.filter(state => state.isFinal)
+    }
+
+    deterministic(): Automaton<R> {
+        this.reorganizeTriggerOverlaps()
+        const ndf = this.cloneNoDuplicates()
+        const df = Automaton.create(ClosureState.startStateOf(ndf))
+        df.reorganizeTriggerOverlaps()
+        return df.cloneNoDuplicates()
     }
 
     get isOptional(): boolean {
         return this.startState.isFinal
     }
 
-    reorganizeTriggerOverlaps() {
+    private reorganizeTriggerOverlaps() {
         this.states.forEach(s => s.reorganizeTriggerOverlaps())
     }
 
@@ -179,6 +191,17 @@ class AutomatonMathcer<R> implements Matcher<R> {
         return null
     }
     
+    randomMatch(): utils.Pair<number, R[]> | null {
+        if (this.current.transitions.length == 0) {
+            return null
+        }
+        const index = utils.randomInt(this.current.transitions.length)
+        const transition = this.current.transitions[index]
+        const char = transition.trigger.random()
+        this.current = transition.target
+        return utils.pair(char, this.current.recognizables)
+    }
+
 }
 
 export class State<R> {
@@ -187,7 +210,7 @@ export class State<R> {
 
     index: number = -1
 
-    private constructor(readonly recognizables: R[]) {
+    protected constructor(readonly recognizables: R[]) {
     }
 
     reorganizeTriggerOverlaps() {
@@ -258,4 +281,35 @@ class Transition<R> {
         return this.target === that.target && charset.identical(this.trigger, that.trigger) 
     }
 
+}
+
+class ClosureState<R> extends State<R> {
+
+    protected constructor(readonly automaton: Automaton<R>, readonly stateIndexes: number[]) {
+        super(utils.unique(utils.flatMap(stateIndexes, index => automaton.states[index].recognizables)))
+    }
+
+    static startStateOf<R>(automaton: Automaton<R>) {
+        return ClosureState.enclose(automaton, [0], [])
+    }
+
+    private static enclose<R>(automaton: Automaton<R>, stateIndexes: number[], closures: ClosureState<R>[]) {
+        const closure = new ClosureState(automaton, utils.unique(stateIndexes).sort());
+        const comparator: utils.Comparator<ClosureState<R>> = utils.comparing(state => state.stateIndexes, utils.arrayComparator(utils.numberComparator))
+        const identicalClosure = closures.find(c => comparator(c, closure) == 0)
+        return identicalClosure || ClosureState.init<R>(closure, automaton, closures) 
+    }
+
+
+    private static init<R>(closure: ClosureState<R>, automaton: Automaton<R>, closures: ClosureState<R>[]) {
+        closures.push(closure)
+        const states = closure.stateIndexes.map(index => automaton.states[index])
+        const transitions = utils.flatMap(states, state => state.transitions)
+        const groupedTransitions = utils.group(transitions, t => t.trigger, t => t.target, charset.charSetComparator)
+        for (let transition of groupedTransitions) {
+            const targetIndexes = transition.value.map(target => automaton.states.indexOf(target))
+            closure.on(transition.key, ClosureState.enclose(automaton, targetIndexes, closures))
+        }
+        return closure
+    }
 }

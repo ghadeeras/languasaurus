@@ -82,7 +82,7 @@ const rangeComparator: utils.Comparator<Range> = utils.comparingBy(
     utils.comparing(r => r.max, utils.numberComparator),
 )
 
-const charSetComparator: utils.Comparator<CharSet> = utils.comparing(set => set.ranges, utils.arrayComparator(rangeComparator))
+export const charSetComparator: utils.Comparator<CharSet> = utils.comparing(set => set.ranges, utils.arrayComparator(rangeComparator))
 
 export function identical(set1: CharSet, set2: CharSet): boolean {
     return charSetComparator(set1, set2) == 0
@@ -91,12 +91,8 @@ export function identical(set1: CharSet, set2: CharSet): boolean {
 export type Overlap = utils.Pair<number[], CharSet>;
 
 type IndexedLimit = utils.Pair<number, RangeLimit>;
-const setsAppender: utils.Reducer<CharSet[], CharSet> = (sets, set) => {
-    sets.push(set);
-    return sets;
-};
-const distinct = utils.distinctFunction(utils.numberComparator);
-const aggregate = utils.aggregateFunction(utils.arrayComparator(utils.numberComparator), () => [], setsAppender);
+const distinctNumbers = utils.distinctFunction(utils.numberComparator);
+const numbersComparator = utils.arrayComparator(utils.numberComparator);
 
 export function computeOverlaps(...sets: CharSet[]): Overlap[] {
     const result: Overlap[] = [];
@@ -114,7 +110,7 @@ export function computeOverlaps(...sets: CharSet[]): Overlap[] {
     for (let limit of limits) {
         if (compareLimits(limit.value, lastLimit) > 0 && ids.length > 0) {
             result.push({
-                key: distinct(ids),
+                key: distinctNumbers(ids),
                 value: range(
                     lastLimit.upper ? lastLimit.value + 1 : lastLimit.value, 
                     limit.value.upper ? limit.value.value : limit.value.value - 1
@@ -129,7 +125,7 @@ export function computeOverlaps(...sets: CharSet[]): Overlap[] {
         }
     }
 
-    const aggregatedResult = aggregate(result);
+    const aggregatedResult = utils.group(result, overlap => overlap.key, overlap => overlap.value, numbersComparator);
     return aggregatedResult.map(set => utils.pair(set.key, union(...set.value)));
 }
 
@@ -152,7 +148,7 @@ class CharRange implements CharSet {
     }
 
     random(): number {
-        return this.min + randomInt(this.size);
+        return this.min + utils.randomInt(this.size);
     }
 
     get ranges(): Range[] {
@@ -188,7 +184,7 @@ class Union implements CharSet {
     }
 
     random(): number {
-        const index = randomInt(this.charRanges.length);
+        const index = utils.randomInt(this.charRanges.length);
         return this.charRanges[index].random();
     }
 
@@ -214,10 +210,6 @@ function isInvalidChar(char: number): boolean {
     return char < alphabet.min || char > alphabet.max || char != Math.round(char);
 }
 
-function randomInt(max: number): number {
-    return Math.floor(Math.random() * Math.floor(max));
-}
-  
 type RangeLimit = {
 
     value: number;

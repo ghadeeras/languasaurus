@@ -18,14 +18,26 @@ export function pair<K, V>(key: K, value: V): Pair<K, V> {
 }
 
 export function distinctFunction<T>(comparator: Comparator<T>): Getter<T[], T[]> {
-    return array => aggregate(array, v => v, v => v, comparator, v => v, v => v).map(r => r.value);
+    return array => distinct<T>(array, comparator);
+}
+
+export function distinct<T>(array: T[], comparator: Comparator<T>): T[] {
+    return aggregate(array, v => v, v => v, comparator, v => v, v => v).map(r => r.value);
+}
+
+export function groupFunction<T, K, V>(key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>): Getter<T[], Pair<K, V[]>[]> {
+    return array => group(array, key, value, keyComparator)
+}
+
+export function group<T, K, V>(array: T[], key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>): Pair<K, V[]>[] {
+    return aggregate(array, key, value, keyComparator, () => new Array<V>(), append)
 }
 
 export function aggregateFunction<K, V, R>(keyComparator: Comparator<K>, aggregateIdentity: Getter<K, R>, aggregateReducer: Reducer<R, V>): Getter<Pair<K, V>[], Pair<K, R>[]> {
     return array => aggregate(array, r => r.key, r => r.value, keyComparator, aggregateIdentity, aggregateReducer);
 }
 
-function aggregate<T, K, V, R>(array: T[], key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>, aggregateIdentity: Getter<K, R>, aggregateReducer: Reducer<R, V>): Pair<K, R>[] {
+export function aggregate<T, K, V, R>(array: T[], key: Getter<T, K>, value: Getter<T, V>, keyComparator: Comparator<K>, aggregateIdentity: Getter<K, R>, aggregateReducer: Reducer<R, V>): Pair<K, R>[] {
     const result: Pair<K, R>[] = [];
     const comparator = comparing(key, keyComparator);
     array.sort(comparator).forEach(item => {
@@ -103,3 +115,11 @@ export function unique<T>(values: T[]): T[] {
     return vs
 }
 
+export function append<V>(group: V[], v: V) {
+    group.push(v);
+    return group;
+}
+
+export function randomInt(max: number): number {
+    return Math.floor(Math.random() * Math.floor(max));
+}
