@@ -3,9 +3,13 @@ import * as utils from './utils'
 
 export interface Matcher<R> {
 
-    match(char: number): R[] | null
+    lastRecognized: R[]
 
-    randomMatch(): utils.Pair<number, R[]> | null
+    recognized: R[]
+
+    match(char: number): boolean
+
+    randomMatch(): number | null
 
 }
 
@@ -61,7 +65,8 @@ export class Automaton<R> {
         return new Automaton(draft.states)
     }
 
-    static choice<R>(...automata: Automaton<R>[]): Automaton<R> {
+    static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
+        automata.unshift(automaton)
         const startState: State<R> = State.likeUnion(automata.map(a => a.startState))
         const stateCloner: StateCloner<R> = (state, index) => index == 0 ? startState : State.like(state)
         for (let automaton of automata) {
@@ -173,33 +178,50 @@ export class Automaton<R> {
 
 class AutomatonMathcer<R> implements Matcher<R> {
 
-    private current: State<R>
+    private _current: State<R>
+    private _lastRecognized: R[]
+    private _recognized: R[]
     
     constructor(start: State<R>) {
-        this.current = start
+        this._current = start
+        this._lastRecognized = this._recognized = start.recognizables
     }
 
-    match(char: number): R[] | null {
-        let nextState: State<R> | null = null
-        for (let transition of this.current.transitions) {
-            nextState = transition.apply(char)
+    get lastRecognized() {
+        return this._lastRecognized
+    }
+
+    get recognized() {
+        return this._recognized
+    }
+
+    match(char: number): boolean {
+        for (let transition of this._current.transitions) {
+            const nextState = transition.apply(char)
             if (nextState != null) {
-                this.current = nextState
-                return nextState.recognizables
+                this.transitionTo(nextState)
+                return true
             }
         }
-        return null
+        return false
     }
     
-    randomMatch(): utils.Pair<number, R[]> | null {
-        if (this.current.transitions.length == 0) {
+    randomMatch(): number | null {
+        if (this._current.transitions.length == 0) {
             return null
         }
-        const index = utils.randomInt(this.current.transitions.length)
-        const transition = this.current.transitions[index]
-        const char = transition.trigger.random()
-        this.current = transition.target
-        return utils.pair(char, this.current.recognizables)
+        const index = utils.randomInt(this._current.transitions.length)
+        const transition = this._current.transitions[index]
+        this.transitionTo(transition.target)
+        return transition.trigger.random()
+    }
+
+    private transitionTo(nextState: State<R>) {
+        this._current = nextState
+        this._recognized = nextState.recognizables
+        if (this._recognized.length > 0) {
+            this._lastRecognized = this._recognized
+        }
     }
 
 }
@@ -300,7 +322,6 @@ class ClosureState<R> extends State<R> {
         return identicalClosure || ClosureState.init<R>(closure, automaton, closures) 
     }
 
-
     private static init<R>(closure: ClosureState<R>, automaton: Automaton<R>, closures: ClosureState<R>[]) {
         closures.push(closure)
         const states = closure.stateIndexes.map(index => automaton.states[index])
@@ -312,4 +333,5 @@ class ClosureState<R> extends State<R> {
         }
         return closure
     }
+    
 }
