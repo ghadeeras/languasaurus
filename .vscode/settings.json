@@ -1,0 +1,6 @@
+{
+    "mocha.requires": [
+        "source-map-support/register"
+    ],
+    "mocha.files.glob": "out/test/**/*.js"
+}

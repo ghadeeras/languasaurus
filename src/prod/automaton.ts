@@ -29,11 +29,22 @@ export class Automaton<R> {
         this.finalStates = this.states.filter(state => state.isFinal)
     }
 
+    toString(): string {
+        let result = ""
+        for (let i = 0; i < this.states.length; i++) {
+            const state = this.states[i]
+            const finalTag = state.isFinal ? '(final)' : ''
+            result += `state #${i} ${finalTag}:\n`
+            for (let transition of state.transitions) {
+                result += `\t on ${transition.trigger} --> state #${this.states.indexOf(transition.target)} \n`
+            }
+        }
+        return result 
+    }
+
     deterministic(): Automaton<R> {
-        this.reorganizeTriggerOverlaps()
         const ndf = this.cloneNoDuplicates()
         const df = Automaton.create(ClosureState.startStateOf(ndf))
-        df.reorganizeTriggerOverlaps()
         return df.cloneNoDuplicates()
     }
 
@@ -62,7 +73,7 @@ export class Automaton<R> {
                 finalState.on(transition.trigger, transition.target)
             }
         }
-        return new Automaton(draft.states)
+        return Automaton.create(draft.startState)
     }
 
     static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
@@ -78,7 +89,7 @@ export class Automaton<R> {
     static concat<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
         automata.unshift(automaton)
         const lastNonOptional = automata.reduce((max, automaton, index) => !automaton.isOptional && index > max ? index : max, -1)
-        const startState: State<R> = lastNonOptional >= 0 ? State.create() : State.like(automaton.startState)
+        const startState: State<R> = lastNonOptional <= -1 ? State.like(automaton.startState) : State.create()
         let jointStates: State<R>[] = [startState]
         for (let i = 0; i < automata.length; i++) {
             jointStates = Automaton.append(automata[i], jointStates, i >= lastNonOptional)
@@ -87,20 +98,18 @@ export class Automaton<R> {
     }
 
     private static append<R>(automaton: Automaton<R>, prevStates: State<R>[], optional: boolean) {
-        const nextStates: State<R>[] = []
-        const cloner: StateCloner<R> = (state, index) => {
-            const clone: State<R> = index == 0 ? 
-                prevStates[0] : 
-                optional ? State.like(state) : State.create()
+        const nextStates: State<R>[] = automaton.isOptional ? [...prevStates] : []
+        const cloner: StateCloner<R> = state => {
+            const clone: State<R> = optional ? State.like(state) : State.create()
             if (state.isFinal) {
                 nextStates.push(clone)
             }
             return clone
         }
-        automaton.clone(cloner)
-        for (let i = 1; i < prevStates.length; i++) {
-            for (let transition of prevStates[0].transitions) {
-                prevStates[i].on(transition.trigger, transition.target)
+        const clonedAutomaton = automaton.clone(cloner)
+        for (let prevState of prevStates) {
+            for (let transition of clonedAutomaton.startState.transitions) {
+                prevState.on(transition.trigger, transition.target)
             }
         }
         return nextStates
@@ -127,6 +136,7 @@ export class Automaton<R> {
     private static doTraverse<R>(state: State<R>, vistedStates: Set<State<R>>, consumer: utils.Consumer<State<R>>) {
         if (!vistedStates.has(state)) {
             vistedStates.add(state)
+            consumer(state)
             for (let transition of state.transitions) {
                 Automaton.doTraverse(transition.target, vistedStates, consumer)
             }
@@ -135,10 +145,12 @@ export class Automaton<R> {
 
     private cloneNoDuplicates(): Automaton<R> {
         let oldSize = this.states.length
+        this.reorganizeTriggerOverlaps()
         let automaton = this.cloneNoShallowDuplicates()
         let newSize = automaton.states.length
         while (newSize < oldSize) {
             oldSize = newSize
+            automaton.reorganizeTriggerOverlaps()
             automaton = automaton.cloneNoShallowDuplicates()
             newSize = automaton.states.length
         }
@@ -146,11 +158,14 @@ export class Automaton<R> {
     }
 
     private cloneNoShallowDuplicates() {
+        const visitedStates: State<R>[] = []
         const clonedStates: State<R>[] = []
         const cloner: StateCloner<R> = state => {
-            let index = clonedStates.findIndex(s => s.identicalTo(state))
+            let index = visitedStates.findIndex(s => s.identicalTo(state))
             if (index < 0) {
-                index = clonedStates.push(State.like(state)) - 1
+                visitedStates.push(state)
+                clonedStates.push(State.like(state))
+                index = clonedStates.length - 1
              }
              return clonedStates[index]
         }
@@ -158,10 +173,10 @@ export class Automaton<R> {
     }
     
 
-    private clone(shallowClone: StateCloner<R> = s => State.like(s)): Automaton<R> {
+    private clone(stateCloner: StateCloner<R> = s => State.like(s)): Automaton<R> {
         let clones: State<R>[] = this.states.map((state, index) => {
             state.index = index
-            return shallowClone(state, index)
+            return stateCloner(state, index)
         })
         for (let i = 0; i < this.states.length; i++) {
             const state = this.states[i]
@@ -241,14 +256,16 @@ export class State<R> {
         const overlaps = charset.computeOverlaps(...triggers)
         this.transitions.splice(0)
         for (let overlap of overlaps) {
-            for (let i of overlap.key) {
-                this.on(overlap.value, targets[i])
+            for (let range of overlap.value.ranges) {
+                for (let i of overlap.key) {
+                    this.on(charset.range(range.min, range.max), targets[i], false)
+                }
             }
         }
     }
 
-    on(trigger: charset.CharSet, target: State<R>) {
-        const index = this.transitions.findIndex(t => t.target == target)
+    on(trigger: charset.CharSet, target: State<R>, optimized: boolean = true) {
+        const index = optimized ? this.transitions.findIndex(t => t.target == target) : -1
         if (index < 0) {
             this.transitions.push(new Transition(trigger, target))
         } else {
@@ -258,11 +275,12 @@ export class State<R> {
     }
 
     identicalTo(that: State<R>): boolean {
-        return this === that || this.recognizables.length == that.recognizables.length && this.recognizables.every(
-            thisR => that.recognizables.find(thatR => thisR === thatR)
-        ) && this.transitions.length == that.transitions.length && this.transitions.every(
-            thisT => that.transitions.find(thatT => thisT.identicalTo(thatT))
-        )
+        const result = this === that || 
+            this.recognizables.length == that.recognizables.length && 
+            this.recognizables.every(thisR => that.recognizables.findIndex(thatR => thisR === thatR) >= 0) && 
+            this.transitions.length == that.transitions.length && 
+            this.transitions.every(thisT => that.transitions.findIndex(thatT => thisT.identicalTo(thatT)) >= 0)
+        return result
     }
 
     get isFinal(): boolean {
@@ -325,7 +343,7 @@ class ClosureState<R> extends State<R> {
     private static init<R>(closure: ClosureState<R>, automaton: Automaton<R>, closures: ClosureState<R>[]) {
         closures.push(closure)
         const states = closure.stateIndexes.map(index => automaton.states[index])
-        const transitions = utils.flatMap(states, state => state.transitions)
+        let transitions = ClosureState.nonOverlappingTransitions<R>(states)
         const groupedTransitions = utils.group(transitions, t => t.trigger, t => t.target, charset.charSetComparator)
         for (let transition of groupedTransitions) {
             const targetIndexes = transition.value.map(target => automaton.states.indexOf(target))
@@ -334,4 +352,15 @@ class ClosureState<R> extends State<R> {
         return closure
     }
     
+
+    private static nonOverlappingTransitions<R>(states: State<R>[]) {
+        const transitions = utils.flatMap(states, state => state.transitions)
+        const tempState: State<R> = State.create()
+        for (let transition of transitions) {
+            tempState.on(transition.trigger, transition.target, false)
+        }
+        tempState.reorganizeTriggerOverlaps()
+        return tempState.transitions
+    }
+
 }

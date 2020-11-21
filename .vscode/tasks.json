@@ -2,20 +2,17 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "tsc: build",
 			"type": "typescript",
 			"tsconfig": "tsconfig.json",
-			"problemMatcher": [
-				"$tsc"
-			],
-			"group": "build",
-			"label": "tsc: build - tsconfig.json"
+			"problemMatcher": "$tsc",
+			"group": "build"
 		},
 		{
+			"label": "npm: test",
 			"type": "npm",
 			"script": "test",
-			"problemMatcher": [],
-			"label": "npm: test",
-			"detail": "mocha out/test/**/*.test.js",
+			"problemMatcher": "$tsc",
 			"group": {
 				"kind": "build",
 				"isDefault": true

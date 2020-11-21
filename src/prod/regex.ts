@@ -109,7 +109,7 @@ export class RegEx implements sets.SymbolSet<string> {
 
     find(s: string, from: number = 0): [number, number] | null {
         for (let i = from; i < s.length; i++) {
-            const to = this.shortestMatch(s, i)
+            const to = this.longestMatch(s, i)
             if (to != null) {
                 return [i, to]
             } 
@@ -118,11 +118,11 @@ export class RegEx implements sets.SymbolSet<string> {
     }
 
     longestMatch(s: string, from: number = 0): number | null {
-        let to = null
-        for (let length of this.matchIndexes(s, from)) {
-            to = length
+        let lastTo = null
+        for (let to of this.matchIndexes(s, from)) {
+            lastTo = to
         }
-        return to
+        return lastTo
     }
 
     shortestMatch(s: string, from: number = 0): number | null {
@@ -139,7 +139,7 @@ export class RegEx implements sets.SymbolSet<string> {
                 yield i
             }
             if (!matcher.match(s.charCodeAt(i))) {
-                break
+                return
             }
         }
         if (matcher.recognized.length > 0) {
@@ -153,6 +153,14 @@ export class RegEx implements sets.SymbolSet<string> {
 
     repetition() {
         return RegEx.from(this.automaton.repetition())
+    }
+
+    then(r: RegEx) {
+        return concat(this, r)
+    }
+
+    or(r: RegEx) {
+        return choice(this, r)
     }
 
     static from(automaton: Automaton) {

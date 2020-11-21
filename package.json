@@ -4,7 +4,7 @@
   "description": "A language recognition tool to construct lexical and syntax analyzers (i.e. scanners and parsers).",
   "type": "commonjs",
   "scripts": {
-    "test": "mocha --require source-map-support/register out/test/**/*.test.js",
+    "test": "nyc --reporter=html -- mocha --require source-map-support/register out/test/**/*.test.js",
     "pretest": "tsc"
   },
   "keywords": [],
@@ -15,6 +15,7 @@
     "@types/mocha": "^7.0.2",
     "chai": "^4.2.0",
     "mocha": "^7.2.0",
+    "nyc": "^15.1.0",
     "source-map-support": "^0.5.19"
   }
 }
