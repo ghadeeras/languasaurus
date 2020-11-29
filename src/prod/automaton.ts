@@ -13,7 +13,8 @@ export interface Matcher<R> {
 
 }
 
-type StateCloner<R> = utils.Mapper<State<R>, State<R>>
+type StateMapper<R1, R2> = utils.Mapper<State<R1>, State<R2>>
+type StateCloner<R> = StateMapper<R, R>
 
 export class Automaton<R> {
 
@@ -27,6 +28,10 @@ export class Automaton<R> {
         this.startState = this.states[0]
         this.transientStates = this.states.filter(state => state.isTransient)
         this.finalStates = this.states.filter(state => state.isFinal)
+    }
+
+    get isOptional(): boolean {
+        return this.startState.isFinal
     }
 
     toString(): string {
@@ -48,14 +53,6 @@ export class Automaton<R> {
         return df.cloneNoDuplicates()
     }
 
-    get isOptional(): boolean {
-        return this.startState.isFinal
-    }
-
-    private reorganizeTriggerOverlaps() {
-        this.states.forEach(s => s.reorganizeTriggerOverlaps())
-    }
-
     optional(): Automaton<R> {
         if (this.isOptional) {
             return this
@@ -74,6 +71,14 @@ export class Automaton<R> {
             }
         }
         return Automaton.create(draft.startState)
+    }
+
+    newMatcher(): Matcher<R> {
+        return new AutomatonMathcer(this.startState)
+    }
+
+    map<RR>(mapper: utils.Mapper<R, RR>): Automaton<RR> {
+        return this.mapStates(state => State.create(...state.recognizables.map(mapper)))
     }
 
     static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
@@ -97,6 +102,10 @@ export class Automaton<R> {
         return Automaton.create(startState)
     }
 
+    static create<R>(start: State<R>) {
+        return new Automaton(this.allStatesFrom(start))
+    } 
+
     private static append<R>(automaton: Automaton<R>, prevStates: State<R>[], optional: boolean) {
         const nextStates: State<R>[] = automaton.isOptional ? [...prevStates] : []
         const cloner: StateCloner<R> = state => {
@@ -114,14 +123,6 @@ export class Automaton<R> {
         }
         return nextStates
     }
-
-    newMatcher(): Matcher<R> {
-        return new AutomatonMathcer(this.startState)
-    }
-
-    static create<R>(start: State<R>) {
-        return new Automaton(this.allStatesFrom(start))
-    } 
 
     private static allStatesFrom<R>(start: State<R>): State<R>[] {
         const result: State<R>[] = []
@@ -157,6 +158,10 @@ export class Automaton<R> {
         return automaton
     }
 
+    private reorganizeTriggerOverlaps() {
+        this.states.forEach(s => s.reorganizeTriggerOverlaps())
+    }
+
     private cloneNoShallowDuplicates() {
         const visitedStates: State<R>[] = []
         const clonedStates: State<R>[] = []
@@ -174,19 +179,23 @@ export class Automaton<R> {
     
 
     private clone(stateCloner: StateCloner<R> = s => State.like(s)): Automaton<R> {
-        let clones: State<R>[] = this.states.map((state, index) => {
+        return this.mapStates(stateCloner)
+    }
+
+    private mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
+        let mappedStates: State<RR>[] = this.states.map((state, index) => {
             state.index = index
-            return stateCloner(state, index)
+            return stateMapper(state, index)
         })
         for (let i = 0; i < this.states.length; i++) {
             const state = this.states[i]
-            const clone = clones[i]
+            const clone = mappedStates[i]
             for (let transition of state.transitions) {
                 const index = transition.target.index
-                clone.on(transition.trigger, clones[index])
+                clone.on(transition.trigger, mappedStates[index])
             }
         }
-        return new Automaton(clones)
+        return new Automaton(mappedStates)
     }
 
 }
