@@ -200,6 +200,16 @@ describe("regex", () => {
             expect(r1.optional().or(r2.optional()).automaton.isOptional).to.be.true
         })
 
+        it("produces the most general expression if it contains other choices", () => {
+            const general = regex.concat(
+                regex.inRanges("a-z", "A-Z"),
+                regex.zeroOrMore(regex.inRanges("a-z", "A-Z", "0-9"))
+            )
+            const special = regex.word("fun")
+            const union = regex.choice(general, special)
+            expect(union).to.satisfy(equivalentTo(general))
+        })
+
     })
 
     describe("concat", () => {

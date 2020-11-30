@@ -2,93 +2,164 @@ import * as streams from './streams'
 import * as tokens from './tokens'
 import * as automaton from './automaton'
 import * as regex from './regex'
-import * as charset from './charset'
 
 export class Scanner {
 
-    private readonly error: tokens.TextualTokenType
-    private readonly eof: tokens.BooleanTokenType
-    private readonly tokenTypes: tokens.TokenType<any>[]
-    private readonly automaton: automaton.Automaton<tokens.TokenType<any>>
+    readonly errorType: tokens.TextualTokenType = new tokens.TextualTokenType(regex.oneOrMore(regex.inRange("\u0000-\uffff")))
+    readonly eofType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.oneOrMore(regex.word("EOF")))
 
-    constructor(
-        private stream: streams.InputStream<number>,
-        ...tokenTypes: tokens.TokenType<any>[]
-    ) {
-        const automata = tokenTypes.map(t => t.pattern.automaton.map(() => t))
-        this.error = new tokens.TextualTokenType(regex.oneOrMore(regex.inRange("\u0000-\uffff")))
-        this.eof = new tokens.BooleanTokenType(regex.oneOrMore(regex.word("EOF")))
-        this.tokenTypes = tokenTypes
-        this.automaton = automaton.Automaton.choice(automata[0], ...automata.splice(1))
-    }
+    private readonly tokenTypes: tokens.TokenType<any>[] = []
+    private readonly tokenTypesPrecedence: Map<tokens.TokenType<any>, number> = new Map()
+    
+    private automaton: automaton.Automaton<tokens.TokenType<any>> | null = null
 
-    get errorType(): tokens.TextualTokenType {
-        return this.error;
+    private define<T>(tokenType: tokens.TokenType<T>) {
+        this.tokenTypesPrecedence.set(tokenType, this.tokenTypes.length)
+        this.tokenTypes.push(tokenType)
+        return tokenType
     }
     
-    get eofType(): tokens.BooleanTokenType {
-        return this.eof;
-    }
-    
-    nextToken(): tokens.Token<any> {
-        if (!this.stream.hasMoreSymbols()) {
-            return this.eof.token("EOF", this.stream.position())
-        }
-        const position = this.stream.position()
-        const matcher = this.automaton.newMatcher()
-        let lexeme = ""
-        let goodChars = ""
-        let badChars = ""
-        this.stream.mark()
-        while (this.stream.hasMoreSymbols()) {
-            const symbol = this.stream.readNextSymbol()
-            if (matcher.match(symbol)) {
-                // Good char ...
-                if (badChars.length == 0) {
-                    // ... after good characters => consume character 
-                    this.stream.unmark()
-                    this.stream.mark()
-                    goodChars += String.fromCharCode(symbol)
-                    if (matcher.recognized.length > 0) {
-                        lexeme += goodChars
-                        goodChars = ""
-                    } 
-                } else {
-                    // ... after bad characters => do not consume character & produce bad lexeme 
-                    lexeme = badChars
-                    break
-                }
-            } else {
-                // Bad char ...
-                if (goodChars.length == 0 && lexeme.length == 0) {
-                    // ... after bad characters => consume character 
-                    this.stream.unmark()
-                    this.stream.mark()
-                    badChars += String.fromCharCode(symbol)
-                } else {
-                    // ... after good characters => do not consume character & produce lexeme
-                    lexeme = lexeme.length > 0 ? lexeme : goodChars
-                    break
-                }
-            }
-        }
-        this.stream.reset()
-        return badChars.length == 0 && matcher.lastRecognized.length > 0 ?
-            this.tieBreak(matcher.lastRecognized.map(t => t.token(lexeme, position))) :
-            this.error.token(lexeme, position)
+    protected string(pattern: regex.RegEx) {
+        return this.define(new tokens.TextualTokenType(pattern))
     }
 
-    protected tieBreak(tokens: tokens.Token<any>[]): tokens.Token<any> {
-        if (tokens.length == 1) {
-            return tokens[0]
+    protected float(pattern: regex.RegEx) {
+        return this.define(new tokens.FloatTokenType(pattern))
+    }
+
+    protected integer(pattern: regex.RegEx) {
+        return this.define(new tokens.IntegerTokenType(pattern))
+    }
+
+    protected boolean(pattern: regex.RegEx) {
+        return this.define(new tokens.BooleanTokenType(pattern))
+    }
+
+    protected keyword(word: string) {
+        return this.boolean(regex.word(word))
+    }
+
+    protected op(op: string) {
+        return this.boolean(regex.word(op))
+    }
+
+    protected delimiter(del: string) {
+        return this.boolean(regex.word(del))
+    }
+
+    *iterator(stream: streams.InputStream<number>) {
+        if (this.automaton == null) {
+            const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
+            this.automaton = automaton.Automaton.choice(automata[0], ...automata.splice(1)).deterministic()
         }
-        const index = tokens.map(t => this.tokenTypes.indexOf(t.tokenType)).reduce((i1, i2) => i1 < i2 ? i1 : i2)
-        const tokenType = this.tokenTypes[index]
-        return tokens.find(t => t.tokenType == tokenType) || bug()
+        const matcher = new ScanningMatcher(this.automaton.newMatcher(), stream)
+        while (stream.hasMoreSymbols()) {
+            const position = stream.position()
+            const [recognizables, lexeme] = matcher.nextToken()
+            yield recognizables.length > 0 ?
+                this.tieBreak(recognizables).token(lexeme, position) :
+                this.errorType.token(lexeme, position)
+        }
+        yield this.eofType.token("EOF", stream.position())
+    }
+    
+    protected tieBreak(tokensTypes: tokens.TokenType<any>[]) {
+        if (tokensTypes.length == 1) {
+            return tokensTypes[0]
+        }
+        const index = tokensTypes
+            .map(t => this.tokenTypesPrecedence.get(t) || 0)
+            .reduce((i1, i2) => i1 < i2 ? i1 : i2)
+        return this.tokenTypes[index]
     }
 
 }
 
-function bug<T>(): T {
-    throw new Error("Should never happen!!!")
+const stateStart = 0;
+const stateMatching = 1;
+const stateRecognizing = 2;
+const stateSkipping = 3
+
+class ScanningMatcher {
+
+    private lexeme = ""
+    private consumedChars = ""
+    private state = stateStart
+
+    constructor(
+        private matcher: automaton.Matcher<tokens.TokenType<any>>, 
+        private stream: streams.InputStream<number>
+    ) {
+    }
+
+    nextToken(): [tokens.TokenType<any>[], string] {
+        this.lexeme = ""
+        this.consumedChars = ""
+        this.state = stateStart
+        this.matcher.reset()
+        this.stream.mark()
+        while (this.stream.hasMoreSymbols()) {
+            this.stream.mark()
+
+            const symbol = this.stream.readNextSymbol()
+            const doesMatch = this.matcher.match(symbol)
+            const doesRecognize = this.matcher.recognized.length > 0
+
+            if (this.state == stateStart) {
+                this.state = doesMatch ? stateMatching : stateSkipping
+            }
+            
+            if (doesMatch) {
+                if (this.state == stateMatching || this.state == stateRecognizing) {
+                    // So far matching characters or maybe recognizing ones are encountered =>
+                    // Consume/accumulate the matching characters until a mismatching one is encountered
+                    this.stream.unmark()
+                    this.consumedChars += String.fromCharCode(symbol)
+                    if (doesRecognize) {
+                        this.state = stateRecognizing
+                        this.recognizeConsumedChars()
+                    } 
+                } else { 
+                    // First matching character after consuming a string of definitely mismatching characters =>
+                    // Produce error token, not including the matching character.
+                    this.stream.reset()
+                    this.recognizeConsumedChars()
+                    break
+                }
+            } else {
+                if (this.state == stateSkipping) {
+                    // So far mismatching charachters are encountered =>
+                    // Consume/accumulate the mismatching characters until a matching one is encountered.
+                    this.stream.unmark()
+                    this.consumedChars += String.fromCharCode(symbol)
+                } else if (this.state == stateMatching) {
+                    // First mismatching character after consuming a string of matching, but not-recognizing characters =>
+                    // Produce error token, not including the mismatching character (which could be the first of next token).
+                    this.stream.reset()
+                    this.recognizeConsumedChars()
+                    break
+                } else {
+                    // First mismatching character after consuming a string of matching, some recognizing, characters =>
+                    // Produce good token, not including all the characters after the last recognition.
+                    this.stream.reset()
+                    break
+                }
+            }
+        }
+        if (this.state == stateMatching) {
+            // Reached EOF before end of token =>
+            // Produce error token from consumed matching characters.
+            this.recognizeConsumedChars()
+        }
+        this.stream.reset()
+        return [this.matcher.lastRecognized, this.lexeme]
+    }
+    
+    private recognizeConsumedChars() {
+        this.lexeme += this.consumedChars
+        this.consumedChars = ""
+        this.stream.unmark()
+        this.stream.mark()
+    }
+
 }

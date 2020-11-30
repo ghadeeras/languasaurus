@@ -11,6 +11,8 @@ export interface Matcher<R> {
 
     randomMatch(): number | null
 
+    reset(): void
+
 }
 
 type StateMapper<R1, R2> = utils.Mapper<State<R1>, State<R2>>
@@ -206,9 +208,14 @@ class AutomatonMathcer<R> implements Matcher<R> {
     private _lastRecognized: R[]
     private _recognized: R[]
     
-    constructor(start: State<R>) {
+    constructor(private start: State<R>) {
         this._current = start
         this._lastRecognized = this._recognized = start.recognizables
+    }
+
+    reset(): void {
+        this._current = this.start
+        this._lastRecognized = this._recognized = this.start.recognizables
     }
 
     get lastRecognized() {

@@ -9,6 +9,13 @@
 			"group": "build"
 		},
 		{
+			"label": "npm: web",
+			"type": "npm",
+			"script": "web",
+			"problemMatcher": "$tsc",
+			"group": "build"
+		},
+		{
 			"label": "npm: test",
 			"type": "npm",
 			"script": "test",

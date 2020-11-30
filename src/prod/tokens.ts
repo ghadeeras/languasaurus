@@ -7,25 +7,17 @@ export class TokenType<T> {
         readonly pattern: regex.RegEx,
         readonly parser: (lexeme: string) => T
     ) {
-        if (pattern.optional()) {
+        if (pattern.automaton.isOptional) {
             throw new Error("Token types cannot have patterns that match empty strings")
         }
-        for (let i = 0; i < 100; i++) {
-            this.testParser(pattern, parser)
-        }
     }
 
-    token(lexeme: string, position: streams.StreamPosition): Token<T> {
-        return new Token(this, lexeme, position)
+    token(lexeme: string, position: streams.StreamPosition) {
+        return new Token<T>(this, lexeme, position)
     }
 
-    private testParser(pattern: regex.RegEx, parser: (lexeme: string) => T) {
-        const lexeme = pattern.random()
-        try {
-            parser(lexeme)
-        } catch (e) {
-            throw new Error("Supplied parser failed to parse a valid lexeme like: " + lexeme)
-        }
+    parsedAs(parser: (lexeme: string) => T) {
+        return new TokenType(this.pattern, parser)
     }
 
 }

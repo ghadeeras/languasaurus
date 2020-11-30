@@ -41,15 +41,15 @@ export class TextInputStream implements InputStream<number> {
         }
     }
 
-    hasMoreSymbols(): boolean {
+    hasMoreSymbols() {
         return this.index < this.text.length
     }
 
-    readNextSymbol(): number {
+    readNextSymbol() {
         return this.hasMoreSymbols() ? this.consumeNextSymbol() : 0
     }
 
-    private consumeNextSymbol(): number {
+    private consumeNextSymbol() {
         const symbol = this.text.charCodeAt(this.index++)
         if (symbol == '\n'.charCodeAt(0)) {
             this.line++
@@ -60,17 +60,17 @@ export class TextInputStream implements InputStream<number> {
         return symbol
     }
 
-    mark(): void {
+    mark() {
         this.markedPositions.push(this.position())
     }
 
-    unmark(): void {
+    unmark() {
         if (this.markedPositions.length > 0) {
             this.markedPositions.pop()
         }
     }
 
-    reset(): void {
+    reset() {
         if (this.markedPositions.length > 0) {
             const markedPosition: StreamPosition = this.markedPositions.pop() || bug()
             this.index = markedPosition.index
