@@ -1,7 +1,7 @@
-import * as streams from './streams'
-import * as tokens from './tokens'
-import * as automaton from './automaton'
-import * as regex from './regex'
+import * as streams from './streams.js'
+import * as tokens from './tokens.js'
+import * as automaton from './automaton.js'
+import * as regex from './regex.js'
 
 export class Scanner {
 

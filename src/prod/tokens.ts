@@ -1,5 +1,5 @@
-import * as streams from './streams'
-import * as regex from './regex'
+import * as streams from './streams.js'
+import * as regex from './regex.js'
 
 export class TokenType<T> {
 

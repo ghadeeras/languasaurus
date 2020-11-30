@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import * as utils from "../prod/utils";
+import * as utils from "../prod/utils.js";
 
 describe("utils", () => {
 

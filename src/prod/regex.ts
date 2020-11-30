@@ -1,9 +1,9 @@
-import * as automaton from './automaton'
-import * as sets from './sets'
-import * as charset from './charset'
+import * as automaton from './automaton.js'
+import * as sets from './sets.js'
+import * as charset from './charset.js'
 
-export type State = automaton.State<true>
-export type Automaton = automaton.Automaton<true>
+type State = automaton.State<true>
+type Automaton = automaton.Automaton<true>
 
 export function word(chars: string) {
     const regexes: RegEx[] = []

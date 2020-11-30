@@ -1,6 +1,6 @@
 import { expect } from 'chai';
-import * as utils  from '../prod/utils';
-import * as regex from '../prod/regex'
+import * as utils  from '../prod/utils.js';
+import * as regex from '../prod/regex.js'
 
 describe("regex", () => {
     

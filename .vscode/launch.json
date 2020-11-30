@@ -8,6 +8,7 @@
             "program": "${workspaceFolder}/node_modules/mocha/bin/mocha",
             "args": [
                 "--require", "source-map-support/register",
+                "--require", "esm",
                 "--timeout", "120000000",
                 "${workspaceFolder}/out/test/**/*.test.js",
             ],

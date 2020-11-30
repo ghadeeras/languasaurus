@@ -6,24 +6,17 @@
 			"type": "typescript",
 			"tsconfig": "tsconfig.json",
 			"problemMatcher": "$tsc",
-			"group": "build"
-		},
-		{
-			"label": "npm: web",
-			"type": "npm",
-			"script": "web",
-			"problemMatcher": "$tsc",
-			"group": "build"
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
 		},
 		{
 			"label": "npm: test",
 			"type": "npm",
 			"script": "test",
 			"problemMatcher": "$tsc",
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
+			"group": "build"
 		}
 	]
 }

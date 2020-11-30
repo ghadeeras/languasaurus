@@ -1,5 +1,5 @@
-import { SymbolSet } from "./sets"
-import * as utils from "./utils"
+import { SymbolSet } from "./sets.js"
+import * as utils from "./utils.js"
 
 export type Range = {
     min: number;

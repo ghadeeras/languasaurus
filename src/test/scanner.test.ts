@@ -1,7 +1,7 @@
-import * as scanner from '../prod/scanner'
-import * as streams from '../prod/streams'
-import * as tokens from '../prod/tokens'
-import * as regex from '../prod/regex'
+import * as scanner from '../prod/scanner.js'
+import * as streams from '../prod/streams.js'
+import * as tokens from '../prod/tokens.js'
+import * as regex from '../prod/regex.js'
 import { expect } from 'chai'
 
 class MyScanner extends scanner.Scanner {

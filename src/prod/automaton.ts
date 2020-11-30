@@ -1,5 +1,5 @@
-import * as charset from './charset'
-import * as utils from './utils'
+import * as charset from './charset.js'
+import * as utils from './utils.js'
 
 export interface Matcher<R> {
 
