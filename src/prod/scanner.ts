@@ -75,10 +75,10 @@ export class Scanner {
 
 }
 
-const stateStart = 0;
-const stateMatching = 1;
-const stateRecognizing = 2;
-const stateSkipping = 3
+const stateStart = 0; // No characters were consumed yet.
+const stateConsumingGoodChars = 1; // Potentially consuming characters of a good token.
+const stateRecognizing = 2; // Matched a good token! But maybe a longer one could be matched.
+const stateConsumingBadChars = 3 // Consuming bad characters to be output as an error token. 
 
 class ScanningMatcher {
 
@@ -99,56 +99,35 @@ class ScanningMatcher {
         this.matcher.reset()
         this.stream.mark()
         while (this.stream.hasMoreSymbols()) {
+            // Look-ahead symbol
             this.stream.mark()
-
             const symbol = this.stream.readNextSymbol()
+
             const doesMatch = this.matcher.match(symbol)
             const doesRecognize = this.matcher.recognized.length > 0
 
             if (this.state == stateStart) {
-                this.state = doesMatch ? stateMatching : stateSkipping
+                this.state = doesMatch ? stateConsumingGoodChars : stateConsumingBadChars
             }
             
-            if (doesMatch) {
-                if (this.state == stateMatching || this.state == stateRecognizing) {
-                    // So far matching characters or maybe recognizing ones are encountered =>
-                    // Consume/accumulate the matching characters until a mismatching one is encountered
-                    this.stream.unmark()
-                    this.consumedChars += String.fromCharCode(symbol)
-                    if (doesRecognize) {
-                        this.state = stateRecognizing
-                        this.recognizeConsumedChars()
-                    } 
-                } else { 
-                    // First matching character after consuming a string of definitely mismatching characters =>
-                    // Produce error token, not including the matching character.
-                    this.stream.reset()
+            if (doesMatch != (this.state == stateConsumingBadChars)) { // '!=' is equivalent to xor
+                // Consume look-ahead symbol
+                this.stream.unmark()
+                this.consumedChars += String.fromCharCode(symbol)
+
+                if (doesRecognize) {
+                    this.state = stateRecognizing
                     this.recognizeConsumedChars()
-                    break
-                }
+                } 
             } else {
-                if (this.state == stateSkipping) {
-                    // So far mismatching charachters are encountered =>
-                    // Consume/accumulate the mismatching characters until a matching one is encountered.
-                    this.stream.unmark()
-                    this.consumedChars += String.fromCharCode(symbol)
-                } else if (this.state == stateMatching) {
-                    // First mismatching character after consuming a string of matching, but not-recognizing characters =>
-                    // Produce error token, not including the mismatching character (which could be the first of next token).
-                    this.stream.reset()
-                    this.recognizeConsumedChars()
-                    break
-                } else {
-                    // First mismatching character after consuming a string of matching, some recognizing, characters =>
-                    // Produce good token, not including all the characters after the last recognition.
-                    this.stream.reset()
-                    break
-                }
+                // Return look-ahead symbol to the stream 
+                this.stream.reset()
+                break
             }
         }
-        if (this.state == stateMatching) {
-            // Reached EOF before end of token =>
-            // Produce error token from consumed matching characters.
+        if (this.state != stateRecognizing) {
+            // Loop ended before recognizing anything =>
+            // Recognize consumed characters as an error token.
             this.recognizeConsumedChars()
         }
         this.stream.reset()

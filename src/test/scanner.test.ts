@@ -103,6 +103,13 @@ describe("Scanner", () => {
         expect(notEq.tokenType).to.equal(myScanner.opNotEq)
     })
 
+    it("produces error token from unmatched tokens", () => {
+        const [err] = tokenize("@#$%^&}")
+
+        expect(err.tokenType).to.equal(myScanner.errorType)
+        expect(err.lexeme).to.equal("@#$%^&}")
+    })
+
     it("produces error token from patially matched token and continues parsing from offending character", () => {
         const [err, comment] = tokenize("{ { }")
 
