@@ -120,12 +120,30 @@ describe("Scanner", () => {
     })
 
     it("produces error token from mismatched characters and continues parsing from first matching character", () => {
-        const [err, comment] = tokenize("@#$%^&}{ <-- rubbish }")
+        const [err, comment] = tokenize("@#$%^&{ <-- rubbish }")
 
         expect(err.tokenType).to.equal(myScanner.errorType)
-        expect(err.lexeme).to.equal("@#$%^&}")
+        expect(err.lexeme).to.equal("@#$%^&")
         expect(comment.tokenType).to.equal(myScanner.comment)
         expect(comment.lexeme).to.equal("{ <-- rubbish }")
+    })
+
+    it("produces error token from trailing mismatched characters", () => {
+        const [comment, err] = tokenize("{ rubbish --> }@#$%^&")
+
+        expect(comment.tokenType).to.equal(myScanner.comment)
+        expect(comment.lexeme).to.equal("{ rubbish --> }")
+        expect(err.tokenType).to.equal(myScanner.errorType)
+        expect(err.lexeme).to.equal("@#$%^&")
+    })
+
+    it("produces error token from mismatched characters and continues parsing from first matching (and recognizing) character", () => {
+        const [err, comment] = tokenize(":hello")
+
+        expect(err.tokenType).to.equal(myScanner.errorType)
+        expect(err.lexeme).to.equal(":")
+        expect(comment.tokenType).to.equal(myScanner.identifier)
+        expect(comment.lexeme).to.equal("hello")
     })
 
     it("produces error token for incomplete tokens cut short by an EOF", () => {

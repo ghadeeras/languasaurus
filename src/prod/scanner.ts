@@ -128,6 +128,7 @@ class ScanningMatcher {
         if (this.state != stateRecognizing) {
             // Loop ended before recognizing anything =>
             // Recognize consumed characters as an error token.
+            this.matcher.reset()
             this.recognizeConsumedChars()
         }
         this.stream.reset()
