@@ -59,10 +59,12 @@ export class Automaton<R> {
         if (this.isOptional) {
             return this
         }
-        return this.clone((state, index) => index == 0 ? 
-            State.likeUnion(this.finalStates) : 
-            State.like(state)
-        )
+        const newStartState = State.likeUnion(this.finalStates)
+        const clone = this.clone()
+        for (let transition of clone.startState.transitions) {
+            newStartState.on(transition.trigger, transition.target)
+        }
+        return Automaton.create(newStartState)
     }
 
     repetition(): Automaton<R> {

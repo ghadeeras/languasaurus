@@ -173,6 +173,17 @@ describe("regex", () => {
             expect(rr).to.satisfy(equivalentTo(r))
         })
 
+        it("handles initial optional repetitions", () => {
+            const rr = regex.concat(
+                regex.zeroOrMore(regex.word("Yes, ")),
+                regex.word("Please!")
+            ).optional()
+
+            expect(rr.matches("Please!")).to.be.true
+            expect(rr.matches("Yes, Please!")).to.be.true
+            expect(rr.matches("Yes, ")).to.be.false
+        })
+
     })
 
     describe("choice", () => {
