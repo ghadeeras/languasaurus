@@ -88,9 +88,11 @@ export class Automaton<R> {
     static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
         automata.unshift(automaton)
         const startState: State<R> = State.likeUnion(automata.map(a => a.startState))
-        const stateCloner: StateCloner<R> = (state, index) => index == 0 ? startState : State.like(state)
         for (let automaton of automata) {
-            automaton.clone(stateCloner)
+            const clone = automaton.clone()
+            for (let transition of clone.startState.transitions) {
+                startState.on(transition.trigger, transition.target)
+            }
         }
         return Automaton.create(startState)
     }

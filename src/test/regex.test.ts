@@ -221,6 +221,24 @@ describe("regex", () => {
             expect(union).to.satisfy(equivalentTo(general))
         })
 
+        it("handles initial optional repetitions in one of the choices", () => {
+            const rr =  regex.choice(
+                regex.concat(
+                    regex.zeroOrMore(regex.inRange("0-9")),
+                    regex.oneOf("."),
+                    regex.oneOrMore(regex.inRange("0-9"))
+                ),
+                regex.oneOf("$")
+            )
+            expect(rr.matches(".123")).to.be.true
+            expect(rr.matches("123.456")).to.be.true
+            expect(rr.matches("$")).to.be.true
+            expect(rr.matches(".$")).to.be.false
+            expect(rr.matches(".123$")).to.be.false
+            expect(rr.matches("123.$")).to.be.false
+            expect(rr.matches("123$")).to.be.false
+        })
+
     })
 
     describe("concat", () => {
