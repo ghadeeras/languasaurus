@@ -4,9 +4,9 @@ import * as regex from '../prod/regex.js'
 
 describe("regex", () => {
     
-    describe("inRange", () => {
+    describe("charIn (one range)", () => {
 
-        const r = regex.inRange("a..z")
+        const r = regex.charIn("a..z")
 
         it("recognizes strings of one character that is in specified range", () => {
             expect(r.matches("g")).to.be.true
@@ -26,17 +26,17 @@ describe("regex", () => {
 
     })
 
-    describe("inRanges", () => {
+    describe("charIn (many ranges)", () => {
 
-        const rAnUz = regex.inRanges("a..n", "u..z")
-        const rAnOz = regex.inRanges("a..n", "o..z")
-        const rAnHz = regex.inRanges("a..n", "h..z")
+        const rAnUz = regex.charIn("a..n", "u..z")
+        const rAnOz = regex.charIn("a..n", "o..z")
+        const rAnHz = regex.charIn("a..n", "h..z")
 
-        const rAn = regex.inRange("a..n")
-        const rHz = regex.inRange("h..z")
-        const rAz = regex.inRange("a..z")
-        const rUz = regex.inRange("u..z")
-        const rOz = regex.inRange("o..z")
+        const rAn = regex.charIn("a..n")
+        const rHz = regex.charIn("h..z")
+        const rAz = regex.charIn("a..z")
+        const rUz = regex.charIn("u..z")
+        const rOz = regex.charIn("o..z")
 
         it("recognizes strings of one character that is in specified ranges", () => {
             expect(rAnUz.matches(rAn.random())).to.be.true
@@ -79,11 +79,11 @@ describe("regex", () => {
 
     })
 
-    describe("outOfRange", () => {
+    describe("charOutOf", () => {
 
-        const r = regex.outOfRange("b..y")
-        const r1 = regex.inRanges(String.fromCharCode(0) + "a", "z" + String.fromCharCode(0xFFFF))
-        const r2 = regex.inRanges("b..y")
+        const r = regex.charOutOf("b..y")
+        const r1 = regex.charIn(String.fromCharCode(0) + "a", "z" + String.fromCharCode(0xFFFF))
+        const r2 = regex.charIn("b..y")
 
         it("recognizes strings of one character that is NOT in specified range", () => {
             expect(r.matches(r1.random())).to.be.true
@@ -98,11 +98,11 @@ describe("regex", () => {
 
     })
 
-    describe("(n)oneOf", () => {
+    describe("char(Not)From", () => {
 
         const chars = "aeimqux"
-        const one = regex.oneOf(chars)
-        const none = regex.noneOf(chars)
+        const one = regex.charFrom(chars)
+        const none = regex.charNotFrom(chars)
 
         it("recognizes strings of one character that is in/out of specified chars", () => {
             for (let i = 0; i < chars.length; i++) {
@@ -213,8 +213,8 @@ describe("regex", () => {
 
         it("produces the most general expression if it contains other choices", () => {
             const general = regex.concat(
-                regex.inRanges("a-z", "A-Z"),
-                regex.zeroOrMore(regex.inRanges("a-z", "A-Z", "0-9"))
+                regex.charIn("a-z", "A-Z"),
+                regex.zeroOrMore(regex.charIn("a-z", "A-Z", "0-9"))
             )
             const special = regex.word("fun")
             const union = regex.choice(general, special)
@@ -224,11 +224,11 @@ describe("regex", () => {
         it("handles initial optional repetitions in one of the choices", () => {
             const rr =  regex.choice(
                 regex.concat(
-                    regex.zeroOrMore(regex.inRange("0-9")),
-                    regex.oneOf("."),
-                    regex.oneOrMore(regex.inRange("0-9"))
+                    regex.zeroOrMore(regex.charIn("0-9")),
+                    regex.charFrom("."),
+                    regex.oneOrMore(regex.charIn("0-9"))
                 ),
-                regex.oneOf("$")
+                regex.charFrom("$")
             )
             expect(rr.matches(".123")).to.be.true
             expect(rr.matches("123.456")).to.be.true
@@ -307,7 +307,7 @@ describe("regex", () => {
 
     })
 
-    describe("repetition", () => {
+    describe("repeated", () => {
 
         const r1 = regex.word("one")
         const r2 = regex.word("two")
@@ -321,7 +321,7 @@ describe("regex", () => {
 
         it("recognizes/generates repeated patterns", () => {
             for (let r of rs) {
-                expect(r.repetition()).to.satisfy(equivalentToRepeated(r))
+                expect(r.repeated()).to.satisfy(equivalentToRepeated(r))
             }
         })
 
@@ -342,19 +342,19 @@ describe("determinism", () => {
             const one = regex.word("1")
             const two = regex.word("2")
 
-            const rAn = regex.inRange("a..n")
-            const rHz = regex.inRange("h..z")
+            const rAn = regex.charIn("a..n")
+            const rHz = regex.charIn("h..z")
 
-            const rAt = regex.inRange("a..t")
-            const rNz = regex.inRange("n..z")
+            const rAt = regex.charIn("a..t")
+            const rNz = regex.charIn("n..z")
 
-            const rAg = regex.inRange("a..g")
-            const rHn = regex.inRange("h..n")
-            const rOz = regex.inRange("o..z")
+            const rAg = regex.charIn("a..g")
+            const rHn = regex.charIn("h..n")
+            const rOz = regex.charIn("o..z")
             
-            const rAm = regex.inRange("a..m")
-            const rNt = regex.inRange("n..t")
-            const rUz = regex.inRange("u..z")
+            const rAm = regex.charIn("a..m")
+            const rNt = regex.charIn("n..t")
+            const rUz = regex.charIn("u..z")
 
             const r = regex.choice(
                 regex.concat(rAn, rAt, one),

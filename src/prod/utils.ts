@@ -123,3 +123,7 @@ export function append<V>(group: V[], v: V) {
 export function randomInt(max: number): number {
     return Math.floor(Math.random() * Math.floor(max));
 }
+
+export function bug<T>(): T {
+    throw new Error("Should never happen!!!")
+}

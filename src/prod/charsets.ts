@@ -77,17 +77,6 @@ export function complement(set: CharSet): CharSet {
     return charSet(limits);
 }
 
-const rangeComparator: utils.Comparator<Range> = utils.comparingBy(
-    utils.comparing(r => r.min, utils.numberComparator),
-    utils.comparing(r => r.max, utils.numberComparator),
-)
-
-export const charSetComparator: utils.Comparator<CharSet> = utils.comparing(set => set.ranges, utils.arrayComparator(rangeComparator))
-
-export function identical(set1: CharSet, set2: CharSet): boolean {
-    return charSetComparator(set1, set2) == 0
-}
-
 export type Overlap = utils.Pair<number[], CharSet>;
 
 type IndexedLimit = utils.Pair<number, RangeLimit>;
@@ -156,7 +145,12 @@ class CharRange implements CharSet {
     }
 
     toString(): string {
-        return `[${this.min} .. ${this.max}]`;
+        return `[${this.fromCharCode(this.min)} .. ${this.fromCharCode(this.max)}]`;
+    }
+
+    private fromCharCode(c: number) {
+        const result = String.fromCharCode(c).trim();
+        return result.length > 0 ? result : "\\u" + c;
     }
 
     static of(min: number, max: number): CharRange {

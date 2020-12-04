@@ -1,12 +1,12 @@
 import * as streams from './streams.js'
 import * as tokens from './tokens.js'
-import * as automaton from './automaton.js'
+import * as automaton from './automata.js'
 import * as regex from './regex.js'
 
 export class Scanner {
 
-    readonly errorType: tokens.TextualTokenType = new tokens.TextualTokenType(regex.oneOrMore(regex.inRange("\u0000-\uffff")))
-    readonly eofType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.oneOrMore(regex.word("EOF")))
+    readonly errorTokenType: tokens.TextualTokenType = new tokens.TextualTokenType(regex.oneOrMore(regex.charIn("\u0000-\uffff")))
+    readonly eofTokenType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.word("EOF"))
 
     private readonly tokenTypes: tokens.TokenType<any>[] = []
     private readonly tokenTypesPrecedence: Map<tokens.TokenType<any>, number> = new Map()
@@ -58,9 +58,9 @@ export class Scanner {
             const [recognizables, lexeme] = matcher.nextToken()
             yield recognizables.length > 0 ?
                 this.tieBreak(recognizables).token(lexeme, position) :
-                this.errorType.token(lexeme, position)
+                this.errorTokenType.token(lexeme, position)
         }
-        yield this.eofType.token("EOF", stream.position())
+        yield this.eofTokenType.token("EOF", stream.position())
     }
     
     protected tieBreak(tokensTypes: tokens.TokenType<any>[]) {

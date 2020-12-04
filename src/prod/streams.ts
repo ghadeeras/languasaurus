@@ -1,3 +1,5 @@
+import * as utils from './utils.js'
+
 export type StreamPosition = {
 
     readonly index: number
@@ -72,15 +74,11 @@ export class TextInputStream implements InputStream<number> {
 
     reset() {
         if (this.markedPositions.length > 0) {
-            const markedPosition: StreamPosition = this.markedPositions.pop() || bug()
+            const markedPosition: StreamPosition = this.markedPositions.pop() ?? utils.bug()
             this.index = markedPosition.index
             this.line = markedPosition.line
             this.column = markedPosition.column
         }
     }
 
-}
-
-function bug<T>(): T {
-    throw new Error("Should never happen!!!")
 }

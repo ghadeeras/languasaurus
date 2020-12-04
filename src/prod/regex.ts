@@ -1,72 +1,74 @@
-import * as automaton from './automaton.js'
+import * as automata from './automata.js'
 import * as sets from './sets.js'
-import * as charset from './charset.js'
+import * as charsets from './charsets.js'
 
-type State = automaton.State<true>
-type Automaton = automaton.Automaton<true>
+type State = automata.State<true>
+type Automaton = automata.Automaton<true>
 
 export function word(chars: string) {
     const regexes: RegEx[] = []
     for (let i = 0; i < chars.length; i++) {
         const c = chars.charAt(i)
-        regexes.push(inRange(c))
+        regexes.push(charIn(c))
     }
     return concat(regexes[0], ...regexes.slice(1))
 }
 
-export function oneOf(chars: string) {
-    return inRanges(...splitChars(chars))
+export function char(c: string) {
+    return charFrom(c)
 }
 
-export function noneOf(chars: string) {
-    return outOfRanges(...splitChars(chars))
+export function charOtherThan(c: string) {
+    return charNotFrom(c)
 }
 
-export function inRange(r: string) {
-    return inRanges(r)
+export function charFrom(chars: string) {
+    const [range, ...ranges] = splitChars(chars) 
+    return charIn(range, ...ranges)
 }
 
-export function outOfRange(r: string) {
-    return outOfRanges(r)
+export function charNotFrom(chars: string) {
+    const [range, ...ranges] = splitChars(chars) 
+    return charOutOf(range, ...ranges)
 }
 
-export function inRanges(...rs: string[]) {
-    return ranges(false, ...rs)
+export function charIn(range: string, ...ranges: string[]) {
+    return charRanges(false, [range, ...ranges])
 }
 
-export function outOfRanges(...rs: string[]) {
-    return ranges(true, ...rs)
+export function charOutOf(range: string, ...ranges: string[]) {
+    return charRanges(true, [range, ...ranges])
 }
 
-function ranges(complement: boolean, ...rs: string[]) {
+function charRanges(complement: boolean, rs: string[]) {
     const start = newState()
     const end = newEndState()
-    const trigger = charset.union(...rs.map(r => 
-        charset.range(
+    const trigger = charsets.union(...rs.map(r => 
+        charsets.range(
             r.charCodeAt(0), 
             r.charCodeAt(r.length - 1)
         )
     ))
-    start.on(complement ? charset.complement(trigger) : trigger, end)
-    return RegEx.from(automaton.Automaton.create(start))
+    start.on(complement ? charsets.complement(trigger) : trigger, end)
+    return RegEx.from(automata.Automaton.create(start))
 }
 
 export function concat(regex: RegEx, ...regexes: RegEx[]) {
-    const automata = regexes.map(regex => regex.automaton)
-    return RegEx.from(automaton.Automaton.concat(regex.automaton, ...automata))
+    const allAutomata = regexes.map(regex => regex.automaton)
+    return RegEx.from(automata.Automaton.concat(regex.automaton, ...allAutomata))
 }
 
 export function choice(regex: RegEx, ...regexes: RegEx[]) {
-    const automata = regexes.map(regex => regex.automaton)
-    return RegEx.from(automaton.Automaton.choice(regex.automaton, ...automata))
+    const allAutomata = regexes.map(regex => regex.automaton)
+    return RegEx.from(automata.Automaton.choice(regex.automaton, ...allAutomata))
 }
 
 export function oneOrMore(regex: RegEx) {
-    return regex.repetition()
+    return regex.repeated()
 }
 
 export function zeroOrMore(regex: RegEx) {
-    return regex.repetition().optional()
+    return regex.repeated().optional()
 }
 
 export class RegEx implements sets.SymbolSet<string> {
@@ -151,8 +153,8 @@ export class RegEx implements sets.SymbolSet<string> {
         return RegEx.from(this.automaton.optional())
     }
 
-    repetition() {
-        return RegEx.from(this.automaton.repetition())
+    repeated() {
+        return RegEx.from(this.automaton.repeated())
     }
 
     then(r: RegEx) {
@@ -170,11 +172,11 @@ export class RegEx implements sets.SymbolSet<string> {
 }
 
 function newState(): State {
-    return automaton.State.create()
+    return automata.State.create()
 }
 
 function newEndState(): State {
-    return automaton.State.create(true)
+    return automata.State.create(true)
 }
 
 function splitChars(chars: string) {

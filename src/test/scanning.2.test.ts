@@ -1,4 +1,4 @@
-import * as scanner from '../prod/scanner.js'
+import * as scanner from '../prod/scanning.js'
 import * as streams from '../prod/streams.js'
 import * as tokens from '../prod/tokens.js'
 import * as regex from '../prod/regex.js'
@@ -15,22 +15,22 @@ class MyScanner extends scanner.Scanner {
     constructor() {
         super()
 
-        this.arithmeticOperators = this.string(regex.oneOf("+-*/"))
+        this.arithmeticOperators = this.string(regex.charFrom("+-*/"))
         this.arrows = this.string(regex.choice(
             regex.word("-->"),
             regex.word("<--")
         ))
         this.margins = this.string(regex.concat(
-            regex.oneOf("|"),
+            regex.charFrom("|"),
             regex.concat(
-                regex.zeroOrMore(regex.oneOf(".")),
-                regex.oneOf("|")
+                regex.zeroOrMore(regex.charFrom(".")),
+                regex.charFrom("|")
             ).optional()
         ))
         this.floats = this.float(regex.concat(
-            regex.oneOrMore(regex.inRange("0-9")),
-            regex.oneOf("."),
-            regex.oneOrMore(regex.inRange("0-9"))
+            regex.oneOrMore(regex.charIn("0-9")),
+            regex.charFrom("."),
+            regex.oneOrMore(regex.charIn("0-9"))
         ))
         this.functionKeywords = this.string(regex.choice(
             regex.word("fun"),
@@ -55,7 +55,7 @@ describe("Scanner", () => {
     it("handles rubbish", () => {
         const [rubbish] = tokenize("~@#$%")
 
-        expect(rubbish.tokenType).to.equal(myScanner.errorType)
+        expect(rubbish.tokenType).to.equal(myScanner.errorTokenType)
         expect(rubbish.lexeme).to.equal(streamText)
     })
 
@@ -74,7 +74,7 @@ describe("Scanner", () => {
 
         const [badArrow, ...nextTokens] = tokenize("<=-")
 
-        expect(badArrow.tokenType).to.equal(myScanner.errorType)
+        expect(badArrow.tokenType).to.equal(myScanner.errorTokenType)
         expect(badArrow.lexeme).to.equal("<")
     })
 
@@ -120,7 +120,7 @@ describe("Scanner", () => {
 
         const [badFloat, ...nextTokens1] = tokenize("123A")
 
-        expect(badFloat.tokenType).to.equal(myScanner.errorType)
+        expect(badFloat.tokenType).to.equal(myScanner.errorTokenType)
         expect(badFloat.lexeme).to.equal("123")
 
         const [prefixFloat, ...nextTokens2] = tokenize("123.456A")
@@ -142,7 +142,7 @@ describe("Scanner", () => {
 
         const [badFunction, ...nextTokens1] = tokenize("fn")
 
-        expect(badFunction.tokenType).to.equal(myScanner.errorType)
+        expect(badFunction.tokenType).to.equal(myScanner.errorTokenType)
         expect(badFunction.lexeme).to.equal("f")
 
         const [prefixFunction, ...nextTokens2] = tokenize("functor")
@@ -154,7 +154,7 @@ describe("Scanner", () => {
     it("handles rubbish followed by recognizable token", () => {
         const [rubbish, arrow] = tokenize("~@#$%<--")
 
-        expect(rubbish.tokenType).to.equal(myScanner.errorType)
+        expect(rubbish.tokenType).to.equal(myScanner.errorTokenType)
         expect(rubbish.lexeme).to.equal("~@#$%")
 
         expect(arrow.tokenType).to.equal(myScanner.arrows)
@@ -164,7 +164,7 @@ describe("Scanner", () => {
     it("handles rubbish followed by immediately recognizable token", () => {
         const [rubbish, margin] = tokenize("~@#$%|...|")
 
-        expect(rubbish.tokenType).to.equal(myScanner.errorType)
+        expect(rubbish.tokenType).to.equal(myScanner.errorTokenType)
         expect(rubbish.lexeme).to.equal("~@#$%")
 
         expect(margin.tokenType).to.equal(myScanner.margins)
@@ -174,14 +174,14 @@ describe("Scanner", () => {
     it("handles promising token followed by EOF", () => {
         const [incompleteFloat] = tokenize("123.")
 
-        expect(incompleteFloat.tokenType).to.equal(myScanner.errorType)
+        expect(incompleteFloat.tokenType).to.equal(myScanner.errorTokenType)
         expect(incompleteFloat.lexeme).to.equal("123.")
     })
 
     it("handles promising token followed by recognizable token", () => {
         const [incompleteFloat, arrow] = tokenize("123.<--")
 
-        expect(incompleteFloat.tokenType).to.equal(myScanner.errorType)
+        expect(incompleteFloat.tokenType).to.equal(myScanner.errorTokenType)
         expect(incompleteFloat.lexeme).to.equal("123.")
 
         expect(arrow.tokenType).to.equal(myScanner.arrows)
@@ -191,7 +191,7 @@ describe("Scanner", () => {
     it("handles promising token followed by immediately recognizable token", () => {
         const [incompleteFunction, plus] = tokenize("fu+")
 
-        expect(incompleteFunction.tokenType).to.equal(myScanner.errorType)
+        expect(incompleteFunction.tokenType).to.equal(myScanner.errorTokenType)
         expect(incompleteFunction.lexeme).to.equal("fu")
 
         expect(plus.tokenType).to.equal(myScanner.arithmeticOperators)
@@ -204,7 +204,7 @@ describe("Scanner", () => {
         expect(shortFunction.tokenType).to.equal(myScanner.functionKeywords)
         expect(shortFunction.lexeme).to.equal("fun")
         
-        expect(trail.tokenType).to.equal(myScanner.errorType)
+        expect(trail.tokenType).to.equal(myScanner.errorTokenType)
         expect(trail.lexeme).to.equal("ct")
     })
 
@@ -214,7 +214,7 @@ describe("Scanner", () => {
         expect(margin.tokenType).to.equal(myScanner.margins)
         expect(margin.lexeme).to.equal("|")
 
-        expect(trail.tokenType).to.equal(myScanner.errorType)
+        expect(trail.tokenType).to.equal(myScanner.errorTokenType)
         expect(trail.lexeme).to.equal("...")
 
         expect(arrow.tokenType).to.equal(myScanner.arrows)
@@ -227,7 +227,7 @@ describe("Scanner", () => {
         expect(shortFunction.tokenType).to.equal(myScanner.functionKeywords)
         expect(shortFunction.lexeme).to.equal("fun")
 
-        expect(trail.tokenType).to.equal(myScanner.errorType)
+        expect(trail.tokenType).to.equal(myScanner.errorTokenType)
         expect(trail.lexeme).to.equal("ct")
 
         expect(plus.tokenType).to.equal(myScanner.arithmeticOperators)
@@ -241,7 +241,7 @@ describe("Scanner", () => {
         for (let token of myScanner.iterator(stream)) {
             result.push(token)
         }
-        expect(result.pop()?.tokenType).to.equal(myScanner.eofType)
+        expect(result.pop()?.tokenType).to.equal(myScanner.eofTokenType)
         expect(result.map(t => t.lexeme).reduce((s1, s2) => s1 + s2, "")).to.equal(text)
         return result
     }

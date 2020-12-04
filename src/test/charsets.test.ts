@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import * as charset from '../prod/charset.js'
+import * as charset from '../prod/charsets.js'
 import * as utils from '../prod/utils.js';
 
 describe("Charset", () => {

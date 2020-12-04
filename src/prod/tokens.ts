@@ -3,7 +3,7 @@ import * as regex from './regex.js'
 
 export class TokenType<T> {
 
-    constructor(
+    protected constructor(
         readonly pattern: regex.RegEx,
         readonly parser: (lexeme: string) => T
     ) {
