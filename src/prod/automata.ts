@@ -101,6 +101,23 @@ export class Automaton<R> {
         return this.mapStates(state => State.create(...state.recognizables.map(mapper)))
     }
 
+    mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
+        const map: Map<State<R>, number> = new Map()
+        let mappedStates: State<RR>[] = this.states.map((state, index) => {
+            map.set(state, index)
+            return stateMapper(state, index)
+        })
+        for (let i = 0; i < this.states.length; i++) {
+            const state = this.states[i]
+            const clone = mappedStates[i]
+            for (let transition of state.transitions) {
+                const index: number = map.get(transition.target) ?? utils.bug()
+                clone.on(transition.trigger, mappedStates[index])
+            }
+        }
+        return new Automaton(mappedStates)
+    }
+
     static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
         automata.unshift(automaton)
         const startState: State<R> = Automaton.unionState(automata.map(a => a.startState))
@@ -201,23 +218,6 @@ export class Automaton<R> {
 
     private clone(stateCloner: StateCloner<R> = s => Automaton.state(s)): Automaton<R> {
         return this.mapStates(stateCloner)
-    }
-
-    private mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
-        const map: Map<State<R>, number> = new Map()
-        let mappedStates: State<RR>[] = this.states.map((state, index) => {
-            map.set(state, index)
-            return stateMapper(state, index)
-        })
-        for (let i = 0; i < this.states.length; i++) {
-            const state = this.states[i]
-            const clone = mappedStates[i]
-            for (let transition of state.transitions) {
-                const index: number = map.get(transition.target) ?? utils.bug()
-                clone.on(transition.trigger, mappedStates[index])
-            }
-        }
-        return new Automaton(mappedStates)
     }
 
     private static state<R>(state: State<R>): State<R> {

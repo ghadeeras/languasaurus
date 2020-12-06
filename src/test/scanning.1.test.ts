@@ -6,19 +6,19 @@ import { expect } from 'chai'
 
 class MyScanner extends scanner.Scanner {
 
-    readonly shortKeyWord: tokens.BooleanTokenType    
-    readonly longKeyWord: tokens.BooleanTokenType    
+    readonly shortKeyWord: tokens.TokenType<boolean>    
+    readonly longKeyWord: tokens.TokenType<boolean>    
 
-    readonly opEq: tokens.BooleanTokenType
-    readonly opSoEq: tokens.BooleanTokenType
-    readonly opNotEq: tokens.BooleanTokenType
+    readonly opEq: tokens.TokenType<boolean>
+    readonly opSoEq: tokens.TokenType<boolean>
+    readonly opNotEq: tokens.TokenType<boolean>
 
-    readonly identifier: tokens.TextualTokenType
-    readonly intNum: tokens.IntegerTokenType
-    readonly floatNum: tokens.FloatTokenType
+    readonly identifier: tokens.TokenType<string>
+    readonly intNum: tokens.TokenType<number>
+    readonly floatNum: tokens.TokenType<number>
 
-    readonly comment: tokens.TextualTokenType
-    readonly ws: tokens.TextualTokenType
+    readonly comment: tokens.TokenType<string>
+    readonly ws: tokens.TokenType<string>
     
     constructor() {
         super()
@@ -32,7 +32,7 @@ class MyScanner extends scanner.Scanner {
         this.identifier = this.string(regex.concat(
             regex.charIn("a-z", "A-Z"),
             regex.zeroOrMore(regex.charIn("a-z", "A-Z", "0-9"))
-        ))
+        )).parsedAs(s => s.toUpperCase())
         this.intNum = this.integer(regex.oneOrMore(regex.charIn("0-9")))
         this.floatNum = this.float(regex.concat(
             regex.zeroOrMore(regex.charIn("0-9")),
@@ -53,6 +53,47 @@ class MyScanner extends scanner.Scanner {
 describe("Scanner", () => {
 
     const myScanner = new MyScanner()
+
+    it("names the declared token types", () => {
+        const s = myScanner
+        expect(s.tokenTypeName(s.shortKeyWord)).to.equal("shortKeyWord")
+        expect(s.tokenTypeName(s.longKeyWord)).to.equal("longKeyWord")
+        expect(s.tokenTypeName(s.opEq)).to.equal("opEq")
+        expect(s.tokenTypeName(s.opSoEq)).to.equal("opSoEq")
+        expect(s.tokenTypeName(s.opNotEq)).to.equal("opNotEq")
+        expect(s.tokenTypeName(s.identifier)).to.equal("identifier")
+        expect(s.tokenTypeName(s.intNum)).to.equal("intNum")
+        expect(s.tokenTypeName(s.floatNum)).to.equal("floatNum")
+        expect(s.tokenTypeName(s.comment)).to.equal("comment")
+        expect(s.tokenTypeName(s.ws)).to.equal("ws")
+
+        expect(s.tokenTyeNames.sort()).to.deep.equal([
+            "shortKeyWord",
+            "longKeyWord",
+            "opEq",
+            "opSoEq",
+            "opNotEq",
+            "identifier",
+            "intNum",
+            "floatNum",
+            "comment",
+            "ws"
+        ].sort())
+    })
+
+    it("generates random tokens", () => {
+        for (let i = 0; i < 100; i++) {
+            const randomToken = myScanner.randomToken()
+            const [token] = tokenize(randomToken.lexeme)
+            expect(token.tokenType).to.equal(randomToken.tokenType)
+        }
+    })
+
+    it("parses value as specified", () => {
+        const s = "identifiersInThisExampleAreCaseInsensitive"
+        const [id] = tokenize(s)
+        expect(id.value).to.equal(s.toUpperCase())
+    })
 
     it("produces no tokens (other than EOF) for empty strings", () => {
         const result = tokenize("")

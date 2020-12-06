@@ -2,13 +2,29 @@ import * as automata from './automata.js'
 import * as sets from './sets.js'
 import * as charsets from './charsets.js'
 
-type State = automata.State<true>
-type Automaton = automata.Automaton<true>
+export type State = automata.State<true>
+export type Automaton = automata.Automaton<true>
 
-export function word(chars: string) {
+export function state(): State {
+    return automata.State.create()
+}
+
+export function endState(): State {
+    return automata.State.create(true)
+}
+
+export function from(state: State) {
+    return RegEx.create(automata.Automaton.create(state))
+}
+
+export function word(w: string) {
+    return chars(w)
+}
+
+export function chars(cs: string) {
     const regexes: RegEx[] = []
-    for (let i = 0; i < chars.length; i++) {
-        const c = chars.charAt(i)
+    for (let i = 0; i < cs.length; i++) {
+        const c = cs.charAt(i)
         regexes.push(charIn(c))
     }
     return concat(regexes[0], ...regexes.slice(1))
@@ -50,17 +66,17 @@ function charRanges(complement: boolean, rs: string[]) {
         )
     ))
     start.on(complement ? charsets.complement(trigger) : trigger, end)
-    return RegEx.from(automata.Automaton.create(start))
+    return RegEx.create(automata.Automaton.create(start))
 }
 
 export function concat(regex: RegEx, ...regexes: RegEx[]) {
     const allAutomata = regexes.map(regex => regex.automaton)
-    return RegEx.from(automata.Automaton.concat(regex.automaton, ...allAutomata))
+    return RegEx.create(automata.Automaton.concat(regex.automaton, ...allAutomata))
 }
 
 export function choice(regex: RegEx, ...regexes: RegEx[]) {
     const allAutomata = regexes.map(regex => regex.automaton)
-    return RegEx.from(automata.Automaton.choice(regex.automaton, ...allAutomata))
+    return RegEx.create(automata.Automaton.choice(regex.automaton, ...allAutomata))
 }
 
 export function oneOrMore(regex: RegEx) {
@@ -150,11 +166,11 @@ export class RegEx implements sets.SymbolSet<string> {
     }
 
     optional() {
-        return RegEx.from(this.automaton.optional())
+        return RegEx.create(this.automaton.optional())
     }
 
     repeated() {
-        return RegEx.from(this.automaton.repeated())
+        return RegEx.create(this.automaton.repeated())
     }
 
     then(r: RegEx) {
@@ -165,7 +181,7 @@ export class RegEx implements sets.SymbolSet<string> {
         return choice(this, r)
     }
 
-    static from(automaton: Automaton) {
+    static create(automaton: Automaton) {
         return new RegEx(automaton.deterministic())
     }
 

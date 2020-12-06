@@ -2,23 +2,65 @@ import * as streams from './streams.js'
 import * as tokens from './tokens.js'
 import * as automaton from './automata.js'
 import * as regex from './regex.js'
+import * as utils from './utils.js'
 
 export class Scanner {
 
     readonly errorTokenType: tokens.TextualTokenType = new tokens.TextualTokenType(regex.oneOrMore(regex.charIn("\u0000-\uffff")))
     readonly eofTokenType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.word("EOF"))
 
-    private readonly tokenTypes: tokens.TokenType<any>[] = []
-    private readonly tokenTypesPrecedence: Map<tokens.TokenType<any>, number> = new Map()
+    private readonly tokenTypes: TokenTypeWrapper<any>[] = []
+    private readonly tokenTypeNames: Map<tokens.TokenType<any>, string> = new Map()
     
-    private automaton: automaton.Automaton<tokens.TokenType<any>> | null = null
+    private _automaton: automaton.Automaton<tokens.TokenType<any>> | null = null
 
-    private define<T>(tokenType: tokens.TokenType<T>) {
-        this.tokenTypesPrecedence.set(tokenType, this.tokenTypes.length)
-        this.tokenTypes.push(tokenType)
-        return tokenType
+    private define<T>(tokenType: tokens.TokenType<T>): tokens.TokenType<T> {
+        return new TokenTypeWrapper(tokenType, this.tokenTypes)
     }
     
+    get automaton() {
+        if (this._automaton == null) {
+            const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
+            const a = automaton.Automaton.choice(automata[0], ...automata.splice(1)).deterministic()
+            this._automaton = a.mapStates(s => s.recognizables.length > 0 ? 
+                automaton.state(this.tieBreak(s.recognizables)) : 
+                automaton.state()
+            )
+        }
+        return this._automaton
+    }
+
+    protected tieBreak(tokensTypes: tokens.TokenType<any>[]) {
+        if (tokensTypes.length == 1) {
+            return tokensTypes[0]
+        }
+        const index = tokensTypes
+            .map(t => t instanceof TokenTypeWrapper ? t.index : utils.bug<number>())
+            .reduce((i1, i2) => i1 < i2 ? i1 : i2)
+        return this.tokenTypes[index]
+    }
+
+    get tokenTyeNames() {
+        this.initTokenNames()
+        return [...this.tokenTypeNames.values()]
+    }
+
+    tokenTypeName<T>(tokenType: tokens.TokenType<T>) {
+        this.initTokenNames()
+        return this.tokenTypeNames.get(tokenType)
+    }
+
+    private initTokenNames() {
+        if (this.tokenTypeNames.size == 0) {
+            for (let key in this) {
+                const value = this[key]
+                if (value instanceof TokenTypeWrapper) {
+                    this.tokenTypeNames.set(value, key)
+                }
+            }
+        }
+    }
+
     protected string(pattern: regex.RegEx) {
         return this.define(new tokens.TextualTokenType(pattern))
     }
@@ -48,29 +90,41 @@ export class Scanner {
     }
 
     *iterator(stream: streams.InputStream<number>) {
-        if (this.automaton == null) {
-            const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
-            this.automaton = automaton.Automaton.choice(automata[0], ...automata.splice(1)).deterministic()
-        }
-        const matcher = new ScanningMatcher(this.automaton.newMatcher(), stream)
+        const matcher = new ScanningMatcher(this.automaton.newMatcher())
         while (stream.hasMoreSymbols()) {
-            const position = stream.position()
-            const [recognizables, lexeme] = matcher.nextToken()
-            yield recognizables.length > 0 ?
-                this.tieBreak(recognizables).token(lexeme, position) :
-                this.errorTokenType.token(lexeme, position)
+            yield this.next(stream, matcher)
         }
         yield this.eofTokenType.token("EOF", stream.position())
     }
     
-    protected tieBreak(tokensTypes: tokens.TokenType<any>[]) {
-        if (tokensTypes.length == 1) {
-            return tokensTypes[0]
+    nextToken(stream: streams.InputStream<number>) {
+        const matcher = new ScanningMatcher(this.automaton.newMatcher())
+        return stream.hasMoreSymbols() ? 
+            this.next(stream, matcher) : 
+            this.eofTokenType.token("EOF", stream.position())
+    }
+    
+    randomToken(shortness: number = 0.1) {
+        const matcher = this.automaton.newMatcher()
+        const index = utils.randomInt(this.tokenTypes.length)
+        const tokenType = this.tokenTypes[index]
+        const lexeme = tokenType.pattern.randomString(shortness)
+        for (let i = 0; i < lexeme.length; i++) {
+            matcher.match(lexeme.charCodeAt(i)) ?? utils.bug()
         }
-        const index = tokensTypes
-            .map(t => this.tokenTypesPrecedence.get(t) || 0)
-            .reduce((i1, i2) => i1 < i2 ? i1 : i2)
-        return this.tokenTypes[index]
+        return matcher.recognized[0].token(lexeme, {
+            line: 1,
+            column: 1,
+            index: 1
+        })
+    }
+    
+    private next(stream: streams.InputStream<number>, matcher: ScanningMatcher) {
+        const position = stream.position()
+        const [recognizables, lexeme] = matcher.nextToken(stream)
+        return recognizables.length > 0 ?
+            recognizables[0].token(lexeme, position) :
+            this.errorTokenType.token(lexeme, position)
     }
 
 }
@@ -86,22 +140,19 @@ class ScanningMatcher {
     private consumedChars = ""
     private state = stateStart
 
-    constructor(
-        private matcher: automaton.Matcher<tokens.TokenType<any>>, 
-        private stream: streams.InputStream<number>
-    ) {
+    constructor(private matcher: automaton.Matcher<tokens.TokenType<any>>) {
     }
 
-    nextToken(): [tokens.TokenType<any>[], string] {
+    nextToken(stream: streams.InputStream<number>): [tokens.TokenType<any>[], string] {
         this.lexeme = ""
         this.consumedChars = ""
         this.state = stateStart
         this.matcher.reset()
-        this.stream.mark()
-        while (this.stream.hasMoreSymbols()) {
+        stream.mark()
+        while (stream.hasMoreSymbols()) {
             // Look-ahead symbol
-            this.stream.mark()
-            const symbol = this.stream.readNextSymbol()
+            stream.mark()
+            const symbol = stream.readNextSymbol()
 
             const doesMatch = this.matcher.match(symbol)
             const doesRecognize = this.matcher.recognized.length > 0
@@ -112,16 +163,16 @@ class ScanningMatcher {
             
             if (doesMatch != (this.state == stateConsumingBadChars)) { // '!=' is equivalent to xor
                 // Consume look-ahead symbol
-                this.stream.unmark()
+                stream.unmark()
                 this.consumedChars += String.fromCharCode(symbol)
 
                 if (doesRecognize) {
                     this.state = stateRecognizing
-                    this.recognizeConsumedChars()
+                    this.recognizeConsumedChars(stream)
                 } 
             } else {
                 // Return look-ahead symbol to the stream 
-                this.stream.reset()
+                stream.reset()
                 break
             }
         }
@@ -129,17 +180,47 @@ class ScanningMatcher {
             // Loop ended before recognizing anything =>
             // Recognize consumed characters as an error token.
             this.matcher.reset()
-            this.recognizeConsumedChars()
+            this.recognizeConsumedChars(stream)
         }
-        this.stream.reset()
+        stream.reset()
         return [this.matcher.lastRecognized, this.lexeme]
     }
     
-    private recognizeConsumedChars() {
+    private recognizeConsumedChars(stream: streams.InputStream<number>) {
         this.lexeme += this.consumedChars
         this.consumedChars = ""
-        this.stream.unmark()
-        this.stream.mark()
+        stream.unmark()
+        stream.mark()
     }
 
+}
+
+class TokenTypeWrapper<T> implements tokens.TokenType<T> {
+
+    constructor(private tokenType: tokens.TokenType<T>, private array: tokens.TokenType<T>[], readonly index: number = array.length) {
+        if (0 <= index && index < array.length) {
+            array[index] = this
+        } else if (index == array.length) {
+            array.push(this)
+        } else {
+            utils.bug()
+        }
+    }
+
+    get pattern(): regex.RegEx {
+        return this.tokenType.pattern
+    }
+    
+    parse(lexeme: string): T {
+        return this.tokenType.parse(lexeme)
+    }
+    
+    token(lexeme: string, position: streams.StreamPosition): tokens.Token<T> {
+        return new tokens.Token(this, lexeme, position)
+    }
+
+    parsedAs(parser: (lexeme: string) => T): tokens.TokenType<T> {
+        return new TokenTypeWrapper(this.tokenType.parsedAs(parser), this.array, this.index)
+    }
+    
 }

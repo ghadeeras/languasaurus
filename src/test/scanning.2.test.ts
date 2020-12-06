@@ -6,11 +6,11 @@ import { expect } from 'chai'
 
 class MyScanner extends scanner.Scanner {
 
-    readonly arithmeticOperators: tokens.TextualTokenType
-    readonly arrows: tokens.TextualTokenType
-    readonly margins: tokens.TextualTokenType
-    readonly functionKeywords: tokens.TextualTokenType
-    readonly floats: tokens.FloatTokenType
+    readonly arithmeticOperators: tokens.TokenType<string>
+    readonly arrows: tokens.TokenType<string>
+    readonly margins: tokens.TokenType<string>
+    readonly functionKeywords: tokens.TokenType<string>
+    readonly floats: tokens.TokenType<number>
     
     constructor() {
         super()
