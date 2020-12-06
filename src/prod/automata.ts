@@ -36,20 +36,32 @@ export function concat<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]):
 
 export class Automaton<R> {
 
-    readonly states: State<R>[]
+    private _states: State<R>[]
+    private _transientStates: State<R>[]
+    private _finalStates: State<R>[]
     readonly startState: State<R>
-    readonly transientStates: State<R>[]
-    readonly finalStates: State<R>[]
 
     private constructor(states: State<R>[]) {
-        this.states = utils.unique(states)
-        this.startState = this.states[0]
-        this.transientStates = this.states.filter(state => state.isTransient)
-        this.finalStates = this.states.filter(state => state.isFinal)
+        this._states = utils.unique(states)
+        this._transientStates = this._states.filter(state => state.isTransient)
+        this._finalStates = this._states.filter(state => state.isFinal)
+        this.startState = this._states[0]
     }
 
     get isOptional(): boolean {
         return this.startState.isFinal
+    }
+
+    get states() {
+        return [...this._states]
+    }
+
+    get transientStates() {
+        return [...this._states]
+    }
+
+    get finalStates() {
+        return [...this._states]
     }
 
     newMatcher(): Matcher<R> {
@@ -58,12 +70,12 @@ export class Automaton<R> {
 
     toString(): string {
         let result = ""
-        for (let i = 0; i < this.states.length; i++) {
-            const state = this.states[i]
+        for (let i = 0; i < this._states.length; i++) {
+            const state = this._states[i]
             const finalTag = state.isFinal ? '(final)' : ''
             result += `state #${i} ${finalTag}:\n`
             for (let transition of state.transitions) {
-                result += `\t on ${transition.trigger} --> state #${this.states.indexOf(transition.target)} \n`
+                result += `\t on ${transition.trigger} --> state #${this._states.indexOf(transition.target)} \n`
             }
         }
         return result 
@@ -79,7 +91,7 @@ export class Automaton<R> {
         if (this.isOptional) {
             return this
         }
-        const newStartState = Automaton.unionState(this.finalStates)
+        const newStartState = Automaton.unionState(this._finalStates)
         const clone = this.clone()
         for (let transition of clone.startState.transitions) {
             newStartState.on(transition.trigger, transition.target)
@@ -89,12 +101,16 @@ export class Automaton<R> {
 
     repeated(): Automaton<R> {
         const draft = this.clone()
-        for (let finalState of draft.finalStates) {
+        for (let finalState of draft._finalStates) {
             for (let transition of draft.startState.transitions) {
                 finalState.on(transition.trigger, transition.target)
             }
         }
         return Automaton.create(draft.startState)
+    }
+
+    clone(stateCloner: StateCloner<R> = s => Automaton.state(s)): Automaton<R> {
+        return this.mapStates(stateCloner)
     }
 
     map<RR>(mapper: utils.Mapper<R, RR>): Automaton<RR> {
@@ -103,12 +119,12 @@ export class Automaton<R> {
 
     mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
         const map: Map<State<R>, number> = new Map()
-        let mappedStates: State<RR>[] = this.states.map((state, index) => {
+        let mappedStates: State<RR>[] = this._states.map((state, index) => {
             map.set(state, index)
             return stateMapper(state, index)
         })
-        for (let i = 0; i < this.states.length; i++) {
-            const state = this.states[i]
+        for (let i = 0; i < this._states.length; i++) {
+            const state = this._states[i]
             const clone = mappedStates[i]
             for (let transition of state.transitions) {
                 const index: number = map.get(transition.target) ?? utils.bug()
@@ -184,21 +200,21 @@ export class Automaton<R> {
     }
 
     private cloneNoDuplicates(): Automaton<R> {
-        let oldSize = this.states.length
+        let oldSize = this._states.length
         this.reorganizeTriggerOverlaps()
         let automaton = this.cloneNoShallowDuplicates()
-        let newSize = automaton.states.length
+        let newSize = automaton._states.length
         while (newSize < oldSize) {
             oldSize = newSize
             automaton.reorganizeTriggerOverlaps()
             automaton = automaton.cloneNoShallowDuplicates()
-            newSize = automaton.states.length
+            newSize = automaton._states.length
         }
         return automaton
     }
 
     private reorganizeTriggerOverlaps() {
-        this.states.forEach(s => s.reorganizeTriggerOverlaps())
+        this._states.forEach(s => s.reorganizeTriggerOverlaps())
     }
 
     private cloneNoShallowDuplicates() {
@@ -215,10 +231,6 @@ export class Automaton<R> {
         }
         return this.clone(cloner)
     }    
-
-    private clone(stateCloner: StateCloner<R> = s => Automaton.state(s)): Automaton<R> {
-        return this.mapStates(stateCloner)
-    }
 
     private static state<R>(state: State<R>): State<R> {
         return State.create(...state.recognizables)
@@ -247,11 +259,11 @@ class AutomatonMathcer<R> implements Matcher<R> {
     }
 
     get lastRecognized() {
-        return this._lastRecognized
+        return [...this._lastRecognized]
     }
 
     get recognized() {
-        return this._recognized
+        return [...this._recognized]
     }
 
     match(char: number): boolean {
@@ -287,13 +299,23 @@ class AutomatonMathcer<R> implements Matcher<R> {
 
 export class State<R> {
 
-    readonly transitions: Transition<R>[] = []
+    private _recognizables: R[]
+    private _transitions: Transition<R>[] = []
 
-    protected constructor(readonly recognizables: R[]) {
+    protected constructor(recognizables: R[]) {
+        this._recognizables = recognizables
+    }
+
+    get recognizables() {
+        return [...this._recognizables]
+    }
+
+    get transitions() {
+        return [...this._transitions]
     }
 
     get isFinal(): boolean {
-        return this.recognizables.length > 0
+        return this._recognizables.length > 0
     }
 
     get isTransient(): boolean {
@@ -301,10 +323,10 @@ export class State<R> {
     }
 
     reorganizeTriggerOverlaps() {
-        const triggers = this.transitions.map(t => t.trigger)
-        const targets = this.transitions.map(t => t.target)
+        const triggers = this._transitions.map(t => t.trigger)
+        const targets = this._transitions.map(t => t.target)
         const overlaps = charsets.computeOverlaps(...triggers)
-        this.transitions.splice(0)
+        this._transitions.splice(0)
         for (let overlap of overlaps) {
             for (let range of overlap.value.ranges) {
                 for (let i of overlap.key) {
@@ -314,22 +336,23 @@ export class State<R> {
         }
     }
 
-    on(trigger: charsets.CharSet, target: State<R>, optimized: boolean = true) {
-        const index = optimized ? this.transitions.findIndex(t => t.target == target) : -1
+    on(trigger: charsets.CharSet, target: State<R>, optimized: boolean = true): State<R> {
+        const index = optimized ? this._transitions.findIndex(t => t.target == target) : -1
         if (index < 0) {
-            this.transitions.push(new Transition(trigger, target))
+            this._transitions.push(new Transition(trigger, target))
         } else {
-            const existingTrigger = this.transitions[index].trigger
-            this.transitions[index] = new Transition(charsets.union(existingTrigger, trigger), target)
+            const existingTrigger = this._transitions[index].trigger
+            this._transitions[index] = new Transition(charsets.union(existingTrigger, trigger), target)
         }
+        return this
     }
 
     identicalTo(that: State<R>): boolean {
         const result = this === that || 
-            this.recognizables.length == that.recognizables.length && 
-            this.recognizables.every(thisR => that.recognizables.findIndex(thatR => thisR === thatR) >= 0) && 
-            this.transitions.length == that.transitions.length && 
-            this.transitions.every(thisT => that.transitions.findIndex(thatT => thisT.identicalTo(thatT)) >= 0)
+            this._recognizables.length == that._recognizables.length && 
+            this._recognizables.every(thisR => that._recognizables.findIndex(thatR => thisR === thatR) >= 0) && 
+            this._transitions.length == that._transitions.length && 
+            this._transitions.every(thisT => that._transitions.findIndex(thatT => thisT.identicalTo(thatT)) >= 0)
         return result
     }
 

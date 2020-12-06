@@ -20,6 +20,12 @@ describe("Charset", () => {
         it("generates the specified character code", () => {
             expect(c.random()).to.equal(123);
         });
+
+        it("is well encapsulated", () => {
+            const ranges = c.ranges
+            ranges.push(charset.alphabet)
+            expect(c.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("except", () => {
@@ -38,6 +44,12 @@ describe("Charset", () => {
         it("generates anything except the specified character code", () => {
             expect(c.random()).to.not.equal(123);
         });
+
+        it("is well encapsulated", () => {
+            const ranges = c.ranges
+            ranges.push(charset.alphabet)
+            expect(c.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("range", () => {
@@ -70,6 +82,12 @@ describe("Charset", () => {
             expect(() => charset.range(-1, +1)).to.throw();
             expect(() => charset.range(0, charset.alphabet.max + 1)).to.throw();
         });
+
+        it("is well encapsulated", () => {
+            const ranges = r.ranges
+            ranges.push(charset.alphabet)
+            expect(r.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("union", () => {
@@ -138,6 +156,15 @@ describe("Charset", () => {
 
             expect(cc).to.deep.equal(charset.all);
         });
+
+        it("is well encapsulated", () => {
+            const c1 = charset.range(123, 321);
+            const c2 = charset.range(456, 654);
+            const u = charset.union(c1, c2);
+            const ranges = u.ranges
+            ranges.push(charset.alphabet)
+            expect(u.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("complement", () => {
@@ -177,6 +204,13 @@ describe("Charset", () => {
             expect(c).to.deep.equal(charset.empty);
         });
 
+        it("is well encapsulated", () => {
+            const c = charset.range(123, 321);
+            const cc = charset.complement(c);
+            const ranges = cc.ranges
+            ranges.push(charset.alphabet)
+            expect(cc.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("intersection", () => {
@@ -206,6 +240,15 @@ describe("Charset", () => {
             const i = charset.intersection(c, charset.empty);
             expect(i).to.deep.equal(charset.empty);
         });
+
+        it("is well encapsulated", () => {
+            const c1 = charset.range(123, 321);
+            const c2 = charset.range(234, 432);
+            const u = charset.intersection(c1, c2);
+            const ranges = u.ranges
+            ranges.push(charset.alphabet)
+            expect(u.ranges).to.not.deep.equal(ranges)
+        })
     });
 
     describe("computeOverlaps", () => {

@@ -89,7 +89,11 @@ export function zeroOrMore(regex: RegEx) {
 
 export class RegEx implements sets.SymbolSet<string> {
 
-    private constructor(readonly automaton: Automaton) {
+    private constructor(private _automaton: Automaton) {
+    }
+
+    get automaton() {
+        return this._automaton.clone()
     }
 
     contains(s: string) {
@@ -105,7 +109,7 @@ export class RegEx implements sets.SymbolSet<string> {
     }
 
     randomString(shortness: number) {
-        const matcher = this.automaton.newMatcher()
+        const matcher = this._automaton.newMatcher()
         let result: number[] = []
         while (true) {
             if (matcher.recognized.length > 0) {
@@ -151,7 +155,7 @@ export class RegEx implements sets.SymbolSet<string> {
     }
 
     *matchIndexes(s: string, from: number = 0) {
-        const matcher = this.automaton.newMatcher()
+        const matcher = this._automaton.newMatcher()
         for (let i = from; i < s.length; i++) {
             if (matcher.recognized.length > 0) {
                 yield i
@@ -166,11 +170,11 @@ export class RegEx implements sets.SymbolSet<string> {
     }
 
     optional() {
-        return RegEx.create(this.automaton.optional())
+        return RegEx.create(this._automaton.optional())
     }
 
     repeated() {
-        return RegEx.create(this.automaton.repeated())
+        return RegEx.create(this._automaton.repeated())
     }
 
     then(r: RegEx) {

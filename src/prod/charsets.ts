@@ -183,7 +183,7 @@ class Union implements CharSet {
     }
 
     get ranges(): Range[] {
-        return this.charRanges;
+        return [...this.charRanges];
     }
 
     toString() {

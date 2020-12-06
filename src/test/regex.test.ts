@@ -1,5 +1,6 @@
-import { expect } from 'chai';
-import * as utils  from '../prod/utils.js';
+import { expect } from 'chai'
+import * as utils  from '../prod/utils.js'
+import * as charsets  from '../prod/charsets.js'
 import * as regex from '../prod/regex.js'
 
 describe("regex", () => {
@@ -336,7 +337,7 @@ describe("regex", () => {
 
     })
 
-describe("determinism", () => {
+    describe("determinism", () => {
 
         it("handles overlaps", () => {
             const one = regex.word("1")
@@ -412,5 +413,34 @@ describe("determinism", () => {
             return true
         }
     }
+
+    describe("encapsulation", () => {
+
+        const recognizables = ["a", "b", "c"]
+        const startState = regex.state()
+        const endState = regex.endState()
+        
+        startState.on(charsets.chars("123"), endState)
+        
+        const r = regex.from(startState) 
+        
+        it("is well isolated from changes to its input", () => {
+            expect(r.matches("1")).to.be.true
+            expect(r.matches("4")).to.be.false
+
+            startState.on(charsets.chars("4"), endState)
+            expect(r.matches("1")).to.be.true
+            expect(r.matches("4")).to.be.false
+        })
+
+        it("encapsulates its automaton well", () => {
+            expect(r.matches("1")).to.be.true
+            expect(r.matches("4")).to.be.false
+
+            r.automaton.startState.on(charsets.chars("4"), endState)
+            expect(r.matches("1")).to.be.true
+            expect(r.matches("4")).to.be.false
+        })
+    })
 
 })

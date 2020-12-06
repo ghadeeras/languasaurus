@@ -18,7 +18,7 @@ export class Scanner {
         return new TokenTypeWrapper(tokenType, this.tokenTypes)
     }
     
-    get automaton() {
+    private get automaton() {
         if (this._automaton == null) {
             const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
             const a = automaton.Automaton.choice(automata[0], ...automata.splice(1)).deterministic()
