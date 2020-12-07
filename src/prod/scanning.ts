@@ -10,7 +10,7 @@ export class Scanner {
     readonly eofTokenType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.word("EOF"))
 
     private readonly tokenTypes: TokenTypeWrapper<any>[] = []
-    private readonly tokenTypeNames: Map<tokens.TokenType<any>, string> = new Map()
+    private readonly _tokenTypeNames: Map<tokens.TokenType<any>, string> = new Map()
     
     private _automaton: automaton.Automaton<tokens.TokenType<any>> | null = null
 
@@ -40,22 +40,22 @@ export class Scanner {
         return this.tokenTypes[index]
     }
 
-    get tokenTyeNames() {
+    get tokenTypeNames() {
         this.initTokenNames()
-        return [...this.tokenTypeNames.values()]
+        return [...this._tokenTypeNames.values()]
     }
 
     tokenTypeName<T>(tokenType: tokens.TokenType<T>) {
         this.initTokenNames()
-        return this.tokenTypeNames.get(tokenType)
+        return this._tokenTypeNames.get(tokenType)
     }
 
     private initTokenNames() {
-        if (this.tokenTypeNames.size == 0) {
+        if (this._tokenTypeNames.size == 0) {
             for (let key in this) {
                 const value = this[key]
                 if (value instanceof TokenTypeWrapper) {
-                    this.tokenTypeNames.set(value, key)
+                    this._tokenTypeNames.set(value, key)
                 }
             }
         }

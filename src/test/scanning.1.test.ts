@@ -67,7 +67,7 @@ describe("Scanner", () => {
         expect(s.tokenTypeName(s.comment)).to.equal("comment")
         expect(s.tokenTypeName(s.ws)).to.equal("ws")
 
-        expect(s.tokenTyeNames.sort()).to.deep.equal([
+        expect(s.tokenTypeNames.sort()).to.deep.equal([
             "shortKeyWord",
             "longKeyWord",
             "opEq",
