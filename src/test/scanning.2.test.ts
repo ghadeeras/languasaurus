@@ -6,38 +6,28 @@ import { expect } from 'chai'
 
 class MyScanner extends scanner.Scanner {
 
-    readonly arithmeticOperators: tokens.TokenType<string>
-    readonly arrows: tokens.TokenType<string>
-    readonly margins: tokens.TokenType<string>
-    readonly functionKeywords: tokens.TokenType<string>
-    readonly floats: tokens.TokenType<number>
+    readonly arithmeticOperators = this.string(regex.charFrom("+-*/"))
+    readonly arrows = this.string(regex.choice(
+        regex.word("-->"),
+        regex.word("<--")
+    ))
+    readonly margins = this.string(regex.concat(
+        regex.charFrom("|"),
+        regex.concat(
+            regex.zeroOrMore(regex.charFrom(".")),
+            regex.charFrom("|")
+        ).optional()
+    ))
+    readonly functionKeywords = this.string(regex.choice(
+        regex.word("fun"),
+        regex.word("function")
+    ))
+    readonly floats = this.float(regex.concat(
+        regex.oneOrMore(regex.charIn("0-9")),
+        regex.charFrom("."),
+        regex.oneOrMore(regex.charIn("0-9"))
+    ))
     
-    constructor() {
-        super()
-
-        this.arithmeticOperators = this.string(regex.charFrom("+-*/"))
-        this.arrows = this.string(regex.choice(
-            regex.word("-->"),
-            regex.word("<--")
-        ))
-        this.margins = this.string(regex.concat(
-            regex.charFrom("|"),
-            regex.concat(
-                regex.zeroOrMore(regex.charFrom(".")),
-                regex.charFrom("|")
-            ).optional()
-        ))
-        this.floats = this.float(regex.concat(
-            regex.oneOrMore(regex.charIn("0-9")),
-            regex.charFrom("."),
-            regex.oneOrMore(regex.charIn("0-9"))
-        ))
-        this.functionKeywords = this.string(regex.choice(
-            regex.word("fun"),
-            regex.word("function")
-        ))
-    }
-
 }
 
 describe("Scanner", () => {

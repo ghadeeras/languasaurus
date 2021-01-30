@@ -336,6 +336,28 @@ export class State<R> {
         }
     }
 
+    onCharFrom(chars: string, target: State<R>): State<R> {
+        return this.on(charsets.chars(chars), target)
+    }
+
+    onCharIn(range: string, target: State<R>): State<R> {
+        return this.on(charsets.range(
+            range.charCodeAt(0), 
+            range.charCodeAt(range.length - 1)
+        ), target)
+    }
+
+    onCharNotFrom(chars: string, target: State<R>): State<R> {
+        return this.on(charsets.complement(charsets.chars(chars)), target)
+    }
+
+    onCharOutOf(range: string, target: State<R>): State<R> {
+        return this.on(charsets.complement(charsets.range(
+            range.charCodeAt(0), 
+            range.charCodeAt(range.length - 1)
+        )), target)
+    }
+
     on(trigger: charsets.CharSet, target: State<R>, optimized: boolean = true): State<R> {
         const index = optimized ? this._transitions.findIndex(t => t.target == target) : -1
         if (index < 0) {

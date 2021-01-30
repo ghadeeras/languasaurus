@@ -52,6 +52,8 @@ export class Scanner {
 
     private initTokenNames() {
         if (this._tokenTypeNames.size == 0) {
+            this._tokenTypeNames.set(this.errorTokenType, "ERROR")
+            this._tokenTypeNames.set(this.eofTokenType, "EOF")
             for (let key in this) {
                 const value = this[key]
                 if (value instanceof TokenTypeWrapper) {

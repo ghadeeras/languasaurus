@@ -19,7 +19,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [12.x]
+        node-version: [14.x]
 
     steps:
     - uses: actions/checkout@v2
@@ -27,9 +27,15 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+    - name: Install, build and test
+      run: |
+          npm ci
+          npm run build --if-present
+          npm test
+    - name: Backup documentation
+      run: |
+          cp ./README.md ./out
+          cp -R ./docs ./out
     - uses: actions/checkout@v2
       with:
         ref: dist

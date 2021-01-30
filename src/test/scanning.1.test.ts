@@ -6,48 +6,31 @@ import { expect } from 'chai'
 
 class MyScanner extends scanner.Scanner {
 
-    readonly shortKeyWord: tokens.TokenType<boolean>    
-    readonly longKeyWord: tokens.TokenType<boolean>    
+    readonly shortKeyWord = this.keyword("fun")
+    readonly longKeyWord = this.keyword("function")    
 
-    readonly opEq: tokens.TokenType<boolean>
-    readonly opSoEq: tokens.TokenType<boolean>
-    readonly opNotEq: tokens.TokenType<boolean>
+    readonly opEq = this.op("=")
+    readonly opSoEq = this.op("===")
+    readonly opNotEq = this.op("!=")
 
-    readonly identifier: tokens.TokenType<string>
-    readonly intNum: tokens.TokenType<number>
-    readonly floatNum: tokens.TokenType<number>
+    readonly identifier = this.string(regex.concat(
+        regex.charIn("a-z", "A-Z"),
+        regex.zeroOrMore(regex.charIn("a-z", "A-Z", "0-9"))
+    )).parsedAs(s => s.toUpperCase())
+    readonly intNum = this.integer(regex.oneOrMore(regex.charIn("0-9")))
+    readonly floatNum = this.float(regex.concat(
+        regex.zeroOrMore(regex.charIn("0-9")),
+        regex.charFrom(".").optional(),
+        regex.oneOrMore(regex.charIn("0-9"))
+    ))
 
-    readonly comment: tokens.TokenType<string>
-    readonly ws: tokens.TokenType<string>
+    readonly comment = this.string(regex.concat(
+        regex.word("{"),
+        regex.zeroOrMore(regex.charNotFrom("{}")),
+        regex.word("}"),
+    ))
+    readonly ws = this.string(regex.oneOrMore(regex.charFrom(" \t\r\n")))
     
-    constructor() {
-        super()
-        this.shortKeyWord = this.keyword("fun")
-        this.longKeyWord = this.keyword("function")
-
-        this.opEq = this.op("=")
-        this.opSoEq = this.op("===")
-        this.opNotEq = this.op("!=")
-
-        this.identifier = this.string(regex.concat(
-            regex.charIn("a-z", "A-Z"),
-            regex.zeroOrMore(regex.charIn("a-z", "A-Z", "0-9"))
-        )).parsedAs(s => s.toUpperCase())
-        this.intNum = this.integer(regex.oneOrMore(regex.charIn("0-9")))
-        this.floatNum = this.float(regex.concat(
-            regex.zeroOrMore(regex.charIn("0-9")),
-            regex.charFrom(".").optional(),
-            regex.oneOrMore(regex.charIn("0-9"))
-        ))
-
-        this.comment = this.string(regex.concat(
-            regex.word("{"),
-            regex.zeroOrMore(regex.charNotFrom("{}")),
-            regex.word("}"),
-        ))
-        this.ws = this.string(regex.oneOrMore(regex.charFrom(" \t\r\n")))
-    }
-
 }
 
 describe("Scanner", () => {
@@ -68,6 +51,8 @@ describe("Scanner", () => {
         expect(s.tokenTypeName(s.ws)).to.equal("ws")
 
         expect(s.tokenTypeNames.sort()).to.deep.equal([
+            "ERROR",
+            "EOF",
             "shortKeyWord",
             "longKeyWord",
             "opEq",
