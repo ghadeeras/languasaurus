@@ -382,8 +382,8 @@ describe("regex", () => {
 
     function equivalentTo(expectedR: regex.RegEx): utils.Mapper<regex.RegEx, boolean> {
         return actualR => {
-            console.log("Expecting the following automaton: \n\n" + actualR.automaton.toString())
-            console.log("\n\n ... to be equivalent to the following automaton:\n\n" + actualR.automaton.toString())
+            // console.log("Expecting the following automaton: \n\n" + actualR.automaton.toString())
+            // console.log("\n\n ... to be equivalent to the following automaton:\n\n" + actualR.automaton.toString())
             for (let i = 0; i < 100; i++) {
                 const actualRandom = actualR.random();
                 const expectedRandom = expectedR.random();

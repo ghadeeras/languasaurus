@@ -42,7 +42,7 @@ jobs:
       run: |
         cp -R docs ./out
         cp README.md ./out
-        cp scripts/release.sh .
+        cp scripts/release.sh ./out
 
     - uses: actions/checkout@v2
       with:
@@ -53,5 +53,4 @@ jobs:
       run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          chmod +x ./release.sh
-          bash ./release.sh
+          bash ./out/release.sh
