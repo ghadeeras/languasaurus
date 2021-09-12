@@ -1,7 +1,7 @@
 #!bash
 
 echo "Removing last snapshot files ..."
-rm latest.js
+rm latest.zip
 rm -R latest
 rm -R docs
 rm README.md
