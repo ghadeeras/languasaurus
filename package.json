@@ -4,8 +4,8 @@
   "description": "A language recognition tool to construct lexical and syntax analyzers (i.e. scanners and parsers).",
   "type": "commonjs",
   "scripts": {
-    "test": "nyc --reporter=html -- mocha --require esm --require source-map-support/register out/test/**/*.test.js",
-    "pretest": "tsc"
+    "test": "nyc --reporter=html -- mocha --require esm --recursive out/test/**/*.test.js",
+    "pretest": "tsc --sourceMap false --declarationMap false"
   },
   "keywords": [],
   "author": "Ghadeer Abou-Saleh",

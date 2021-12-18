@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
   push:
     branches: [ master ]
-    paths-ignore:
-      - '.github/**'
-      - '.vscode/**'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'README.md'
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
 
 jobs:
   build:
@@ -21,7 +21,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14.x]
+        node-version: [16.x]
 
     steps:
     - name: Checkout source code
