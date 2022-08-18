@@ -28,9 +28,9 @@ export class TextInputStream implements InputStream<number> {
 
     private readonly markedPositions: StreamPosition[] = []
     
-    private index: number = 0
-    private line: number = 1
-    private column: number = 1
+    private index = 0
+    private line = 1
+    private column = 1
     
     constructor(private text: string) {
     }

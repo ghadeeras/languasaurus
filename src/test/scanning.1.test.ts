@@ -98,10 +98,10 @@ describe("Scanner", () => {
     })
 
     it("matches longest token possible", () => {
-        const [id, ws, float] = tokenize("funstuff\n\r123.456")
+        const [id, ws, float] = tokenize("funStuff\n\r123.456")
 
         expect(id.tokenType).to.equal(myScanner.identifier)
-        expect(id.lexeme).to.equal("funstuff") 
+        expect(id.lexeme).to.equal("funStuff") 
 
         expect(ws.tokenType).to.equal(myScanner.ws)
         expect(ws.lexeme).to.equal("\n\r") 
@@ -110,7 +110,7 @@ describe("Scanner", () => {
         expect(float.value).to.equal(123.456) 
     })
 
-    it("disambiguates by order of precedence", () => {
+    it("removes ambiguities by order of precedence", () => {
         const [int, fun] = tokenize("123456function")
         expect(myScanner.floatNum.pattern.matches(int.lexeme)).to.be.true 
         expect(myScanner.identifier.pattern.matches(fun.lexeme)).to.be.true 
@@ -136,7 +136,7 @@ describe("Scanner", () => {
         expect(err.lexeme).to.equal("@#$%^&}")
     })
 
-    it("produces error token from patially matched token and continues parsing from offending character", () => {
+    it("produces error token from partially matched token and continues parsing from offending character", () => {
         const [err, comment] = tokenize("{ { }")
 
         expect(err.tokenType).to.equal(myScanner.errorTokenType)
@@ -184,7 +184,7 @@ describe("Scanner", () => {
     function tokenize(text: string): tokens.Token<any>[] {
         const stream = new streams.TextInputStream(text)
         const result: tokens.Token<any>[] = []
-        for (let token of myScanner.iterator(stream)) {
+        for (const token of myScanner.iterator(stream)) {
             result.push(token)
         }
         expect(result.pop()?.tokenType).to.equal(myScanner.eofTokenType)

@@ -78,7 +78,7 @@ describe("Charset", () => {
             expect(rBackwards).to.deep.equal(r);
         });
 
-        it("rejects spanning beyong alphabet limits", () => {
+        it("rejects spanning beyond alphabet limits", () => {
             expect(() => charset.range(-1, +1)).to.throw();
             expect(() => charset.range(0, charset.alphabet.max + 1)).to.throw();
         });
@@ -187,7 +187,7 @@ describe("Charset", () => {
             expect(ccc).to.deep.equal(c);
         });
 
-        it("gives all set if unioned with original set", () => {
+        it("gives all set if unionized with original set", () => {
             const c = charset.range(123, 321);
             const cc = charset.complement(c);
             const u = charset.union(c, cc);
@@ -253,7 +253,7 @@ describe("Charset", () => {
 
     describe("computeOverlaps", () => {
 
-        it("computes overlps between partially overlaping sets", () => {
+        it("computes overlaps between partially overlapping sets", () => {
             const set1 = charset.range(123, 321);
             const set2 = charset.range(234, 432);
 
@@ -266,7 +266,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between identical sets", () => {
+        it("computes overlaps between identical sets", () => {
             const set = charset.range(123, 321);
 
             const overlaps = charset.computeOverlaps(set, set);
@@ -276,7 +276,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between adjacent sets", () => {
+        it("computes overlaps between adjacent sets", () => {
             const set1 = charset.range(123, 321);
             const set2 = charset.range(322, 432);
 
@@ -288,7 +288,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between barely overlapping sets", () => {
+        it("computes overlaps between barely overlapping sets", () => {
             const set1 = charset.range(123, 321);
             const set2 = charset.range(321, 432);
 
@@ -301,7 +301,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between with empty set", () => {
+        it("computes overlaps between with empty set", () => {
             const set = charset.range(123, 321);
 
             const overlaps = charset.computeOverlaps(set, charset.empty);
@@ -311,7 +311,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between with all set", () => {
+        it("computes overlaps between with all set", () => {
             const set = charset.range(123, 321);
 
             const overlaps = charset.computeOverlaps(set, charset.all);
@@ -322,7 +322,7 @@ describe("Charset", () => {
             ]);
         });
 
-        it("computes overlps between sets", () => {
+        it("computes overlaps between sets", () => {
             const set1 = charset.union(charset.range(123, 321), charset.range(456, 654));
             const set2 = charset.union(charset.range(234, 432), charset.range(567, 765));
             const set3 = charset.union(charset.range(345, 543), charset.range(678, 876));
@@ -331,10 +331,10 @@ describe("Charset", () => {
 
             const overlaps = charset.computeOverlaps(...sets);
 
-            for (let overlap of overlaps) {
+            for (const overlap of overlaps) {
                 const intersection = charset.intersection(...sets.map((set, i) => isIn(overlap, i) ? set : charset.complement(set)));
                 expect(intersection).to.deep.equal(overlap.value);
-                for (let otherOverlap of overlaps) {
+                for (const otherOverlap of overlaps) {
                     if (overlap !== otherOverlap) {
                         expect(charset.intersection(overlap.value, otherOverlap.value)).to.deep.equal(charset.empty);
                     }

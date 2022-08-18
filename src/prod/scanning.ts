@@ -54,7 +54,7 @@ export class Scanner {
         if (this._tokenTypeNames.size == 0) {
             this._tokenTypeNames.set(this.errorTokenType, "ERROR")
             this._tokenTypeNames.set(this.eofTokenType, "EOF")
-            for (let key in this) {
+            for (const key in this) {
                 const value = this[key]
                 if (value instanceof TokenTypeWrapper) {
                     this._tokenTypeNames.set(value, key)
@@ -106,7 +106,7 @@ export class Scanner {
             this.eofTokenType.token("EOF", stream.position())
     }
     
-    randomToken(shortness: number = 0.1) {
+    randomToken(shortness = 0.1) {
         const matcher = this.automaton.newMatcher()
         const index = utils.randomInt(this.tokenTypes.length)
         const tokenType = this.tokenTypes[index]

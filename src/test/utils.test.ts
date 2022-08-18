@@ -107,7 +107,7 @@ describe("utils", () => {
 
     describe("removeFirst", () => {
 
-        it("removes first occurence of an item in an array", () => {
+        it("removes first occurrence of an item in an array", () => {
             const array = [1, 4, 7, 0, 3, 6, 4, 9, 2, 5, 8];
 
             const result1 = utils.removeFirst(4, array, numberComparator);
@@ -117,7 +117,7 @@ describe("utils", () => {
             expect(result2).to.deep.equal([1, 4, 7, 0, 3, 6, 9, 2, 5, 8]);
         });
 
-        it("handles occurences at the edges", () => {
+        it("handles occurrences at the edges", () => {
             const array = [1, 4, 7, 0, 3, 6, 4, 9, 2, 5, 8];
 
             const result1 = utils.removeFirst(1, array, numberComparator);
@@ -135,7 +135,7 @@ describe("utils", () => {
             expect(result).to.be.empty;
         });
 
-        it("returns same array if no occurences are found", () => {
+        it("returns same array if no occurrences are found", () => {
             const array = [1, 4, 7, 0, 3, 4, 9, 2, 5, 8];
 
             const result1 = utils.removeFirst(6, array, numberComparator);

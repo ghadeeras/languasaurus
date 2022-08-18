@@ -25,7 +25,7 @@ describe("automata", () => {
             expect(endState.transitions).to.have.lengthOf(1)
         })
 
-        it("encapsulatees the recognizables well", () => {
+        it("encapsulates the recognizables well", () => {
             expect(startState.recognizables).to.have.lengthOf(0)
             expect(endState.recognizables).to.have.lengthOf(recognizables.length)
 

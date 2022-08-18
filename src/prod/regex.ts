@@ -110,7 +110,7 @@ export class RegEx implements sets.SymbolSet<string> {
 
     randomString(shortness: number) {
         const matcher = this._automaton.newMatcher()
-        let result: number[] = []
+        const result: number[] = []
         while (true) {
             if (matcher.recognized.length > 0) {
                 if (Math.random() <= shortness) {
@@ -129,7 +129,7 @@ export class RegEx implements sets.SymbolSet<string> {
         return this.longestMatch(s) == s.length
     }
 
-    find(s: string, from: number = 0): [number, number] | null {
+    find(s: string, from = 0): [number, number] | null {
         for (let i = from; i < s.length; i++) {
             const to = this.longestMatch(s, i)
             if (to != null) {
@@ -139,22 +139,22 @@ export class RegEx implements sets.SymbolSet<string> {
         return null
     }
 
-    longestMatch(s: string, from: number = 0): number | null {
+    longestMatch(s: string, from = 0): number | null {
         let lastTo = null
-        for (let to of this.matchIndexes(s, from)) {
+        for (const to of this.matchIndexes(s, from)) {
             lastTo = to
         }
         return lastTo
     }
 
-    shortestMatch(s: string, from: number = 0): number | null {
-        for (let to of this.matchIndexes(s, from)) {
+    shortestMatch(s: string, from = 0): number | null {
+        for (const to of this.matchIndexes(s, from)) {
             return to
         }
         return null
     }
 
-    *matchIndexes(s: string, from: number = 0) {
+    *matchIndexes(s: string, from = 0) {
         const matcher = this._automaton.newMatcher()
         for (let i = from; i < s.length; i++) {
             if (matcher.recognized.length > 0) {

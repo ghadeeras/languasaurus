@@ -130,14 +130,14 @@ describe("regex", () => {
 
         const r = regex.word("keyWord")
 
-        it("recognizes only the one specifid string of characters", () => {
+        it("recognizes only the one specified string of characters", () => {
             expect(r.matches("keyWord")).to.be.true
             expect(r.matches("...keyWord")).to.be.false
             expect(r.matches("keyWord...")).to.be.false
             expect(r.find("...keyWord...")).to.deep.equal([3, 10])
         })
 
-        it("generates only the one specifid string of characters", () => {
+        it("generates only the one specified string of characters", () => {
             expect(r.random()).to.equal("keyWord")
         })
 
@@ -147,7 +147,7 @@ describe("regex", () => {
 
         const r = regex.word("keyWord").optional()
 
-        it("recognizes the specifid string", () => {
+        it("recognizes the specified string", () => {
             expect(r.matches("keyWord")).to.be.true
             expect(r.matches("...keyWord")).to.be.false
             expect(r.matches("keyWord...")).to.be.false
@@ -160,7 +160,7 @@ describe("regex", () => {
             expect(r.matches("key")).to.be.false
         })
 
-        it("generates the specifid string or an empty string", () => {
+        it("generates the specified string or an empty string", () => {
             let randoms: string[] = [];
             for (let i = 0; i < 100; i++) {
                 randoms.push(r.random())
@@ -198,7 +198,7 @@ describe("regex", () => {
             expect(r.matches(r2.random())).to.be.true
         })
 
-        it("generates one of the specifid expressions", () => {
+        it("generates one of the specified expressions", () => {
             for (let i = 0; i < 100; i++) {
                 const random = r.random()
                 expect(r1.matches(random) || r2.matches(random)).to.be.true
@@ -321,13 +321,13 @@ describe("regex", () => {
         ]
 
         it("recognizes/generates repeated patterns", () => {
-            for (let r of rs) {
+            for (const r of rs) {
                 expect(r.repeated()).to.satisfy(equivalentToRepeated(r))
             }
         })
 
         it("recognizes/generates repeated zero-or-more patterns", () => {
-            for (let r of rs) {
+            for (const r of rs) {
                 const zeroOrMoreRs = regex.zeroOrMore(r);
                 const oneOrMoreRs = regex.oneOrMore(r);
                 const rThenZeroOrMoreRs = r.then(zeroOrMoreRs);
@@ -416,7 +416,6 @@ describe("regex", () => {
 
     describe("encapsulation", () => {
 
-        const recognizables = ["a", "b", "c"]
         const startState = regex.state()
         const endState = regex.endState()
         

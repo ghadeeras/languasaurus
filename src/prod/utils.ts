@@ -85,7 +85,7 @@ export function comparing<A, B>(getter: Getter<A, B>, comparator: Comparator<B>)
 
 export function comparingBy<A>(...comparators: Comparator<A>[]): Comparator<A> {
     return (a1, a2) => {
-        for (let comparator of comparators) {
+        for (const comparator of comparators) {
             const diff = comparator(a1, a2)
             if (diff != 0) {
                 return diff
@@ -107,7 +107,7 @@ export function flatMap<I, O>(array: I[], mapper: Mapper<I, O[]>): O[] {
 
 export function unique<T>(values: T[]): T[] {
     const vs: T[] = []
-    for (let v of values) {
+    for (const v of values) {
         if (vs.indexOf(v) < 0) {
             vs.push(v)
         }

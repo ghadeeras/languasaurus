@@ -2,21 +2,20 @@
   "name": "languasaurus",
   "version": "1.0.0",
   "description": "A language recognition tool to construct lexical and syntax analyzers (i.e. scanners and parsers).",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
-    "test": "nyc --reporter=html -- mocha --require esm --recursive out/test/**/*.test.js",
+    "test": "nyc --reporter=html -- mocha --recursive out/test/**/*.test.js",
     "pretest": "tsc --sourceMap false --declarationMap false"
   },
   "keywords": [],
   "author": "Ghadeer Abou-Saleh",
   "license": "ISC",
   "devDependencies": {
-    "@types/chai": "^4.2.14",
-    "@types/mocha": "^7.0.2",
-    "chai": "^4.2.0",
-    "esm": "^3.2.25",
-    "mocha": "^7.2.0",
+    "@types/chai": "^4.3.3",
+    "@types/mocha": "^9.1.1",
+    "chai": "^4.3.6",
+    "mocha": "^10.0.0",
     "nyc": "^15.1.0",
-    "source-map-support": "^0.5.19"
+    "source-map-support": "^0.5.21"
   }
 }

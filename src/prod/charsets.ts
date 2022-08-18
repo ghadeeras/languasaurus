@@ -96,7 +96,7 @@ export function computeOverlaps(...sets: CharSet[]): Overlap[] {
         value: -1,
         upper: true
     };
-    for (let limit of limits) {
+    for (const limit of limits) {
         if (compareLimits(limit.value, lastLimit) > 0 && ids.length > 0) {
             result.push({
                 key: distinctNumbers(ids),
@@ -216,7 +216,7 @@ function charSet(limits: RangeLimit[]) {
     const ranges: CharRange[] = [];
     let nestingLevel = 0;
     let lastLowerLimit: number = alphabet.min;
-    for (let limit of sortedLimits) {
+    for (const limit of sortedLimits) {
         if (limit.upper) {
             nestingLevel--;
             if (nestingLevel == 0) {
@@ -273,8 +273,8 @@ function complementLimit(limit: RangeLimit): RangeLimit {
 }
 
 function limitsOfSets(sets: CharSet[]) {
-    let limits: RangeLimit[] = [];
-    for (let set of sets) {
+    const limits: RangeLimit[] = [];
+    for (const set of sets) {
         limits.push(...limitsOfRanges(set.ranges));
     }
     return limits;
@@ -282,7 +282,7 @@ function limitsOfSets(sets: CharSet[]) {
 
 function limitsOfRanges(ranges: Range[]): RangeLimit[] {
     const limits: RangeLimit[] = [];
-    for (let range of ranges) {
+    for (const range of ranges) {
         limits.push(...rangeLimits(range))
     }
     return limits;

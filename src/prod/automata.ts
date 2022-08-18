@@ -65,7 +65,7 @@ export class Automaton<R> {
     }
 
     newMatcher(): Matcher<R> {
-        return new AutomatonMathcer(this.startState)
+        return new AutomatonMatcher(this.startState)
     }
 
     toString(): string {
@@ -74,7 +74,7 @@ export class Automaton<R> {
             const state = this._states[i]
             const finalTag = state.isFinal ? '(final)' : ''
             result += `state #${i} ${finalTag}:\n`
-            for (let transition of state.transitions) {
+            for (const transition of state.transitions) {
                 result += `\t on ${transition.trigger} --> state #${this._states.indexOf(transition.target)} \n`
             }
         }
@@ -93,7 +93,7 @@ export class Automaton<R> {
         }
         const newStartState = Automaton.unionState(this._finalStates)
         const clone = this.clone()
-        for (let transition of clone.startState.transitions) {
+        for (const transition of clone.startState.transitions) {
             newStartState.on(transition.trigger, transition.target)
         }
         return Automaton.create(newStartState)
@@ -101,8 +101,8 @@ export class Automaton<R> {
 
     repeated(): Automaton<R> {
         const draft = this.clone()
-        for (let finalState of draft._finalStates) {
-            for (let transition of draft.startState.transitions) {
+        for (const finalState of draft._finalStates) {
+            for (const transition of draft.startState.transitions) {
                 finalState.on(transition.trigger, transition.target)
             }
         }
@@ -119,14 +119,14 @@ export class Automaton<R> {
 
     mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
         const map: Map<State<R>, number> = new Map()
-        let mappedStates: State<RR>[] = this._states.map((state, index) => {
+        const mappedStates: State<RR>[] = this._states.map((state, index) => {
             map.set(state, index)
             return stateMapper(state, index)
         })
         for (let i = 0; i < this._states.length; i++) {
             const state = this._states[i]
             const clone = mappedStates[i]
-            for (let transition of state.transitions) {
+            for (const transition of state.transitions) {
                 const index: number = map.get(transition.target) ?? utils.bug()
                 clone.on(transition.trigger, mappedStates[index])
             }
@@ -137,9 +137,9 @@ export class Automaton<R> {
     static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
         automata.unshift(automaton)
         const startState: State<R> = Automaton.unionState(automata.map(a => a.startState))
-        for (let automaton of automata) {
+        for (const automaton of automata) {
             const clone = automaton.clone()
-            for (let transition of clone.startState.transitions) {
+            for (const transition of clone.startState.transitions) {
                 startState.on(transition.trigger, transition.target)
             }
         }
@@ -171,8 +171,8 @@ export class Automaton<R> {
             return clone
         }
         const clonedAutomaton = automaton.clone(cloner)
-        for (let prevState of prevStates) {
-            for (let transition of clonedAutomaton.startState.transitions) {
+        for (const prevState of prevStates) {
+            for (const transition of clonedAutomaton.startState.transitions) {
                 prevState.on(transition.trigger, transition.target)
             }
         }
@@ -189,12 +189,12 @@ export class Automaton<R> {
         this.doTraverse(state, new Set(), consumer)
     }
 
-    private static doTraverse<R>(state: State<R>, vistedStates: Set<State<R>>, consumer: utils.Consumer<State<R>>) {
-        if (!vistedStates.has(state)) {
-            vistedStates.add(state)
+    private static doTraverse<R>(state: State<R>, visitedStates: Set<State<R>>, consumer: utils.Consumer<State<R>>) {
+        if (!visitedStates.has(state)) {
+            visitedStates.add(state)
             consumer(state)
-            for (let transition of state.transitions) {
-                Automaton.doTraverse(transition.target, vistedStates, consumer)
+            for (const transition of state.transitions) {
+                Automaton.doTraverse(transition.target, visitedStates, consumer)
             }
         }
     }
@@ -242,7 +242,7 @@ export class Automaton<R> {
 
 }
 
-class AutomatonMathcer<R> implements Matcher<R> {
+class AutomatonMatcher<R> implements Matcher<R> {
 
     private _current: State<R>
     private _lastRecognized: R[]
@@ -267,7 +267,7 @@ class AutomatonMathcer<R> implements Matcher<R> {
     }
 
     match(char: number): boolean {
-        for (let transition of this._current.transitions) {
+        for (const transition of this._current.transitions) {
             const nextState = transition.apply(char)
             if (nextState != null) {
                 this.transitionTo(nextState)
@@ -327,9 +327,9 @@ export class State<R> {
         const targets = this._transitions.map(t => t.target)
         const overlaps = charsets.computeOverlaps(...triggers)
         this._transitions.splice(0)
-        for (let overlap of overlaps) {
-            for (let range of overlap.value.ranges) {
-                for (let i of overlap.key) {
+        for (const overlap of overlaps) {
+            for (const range of overlap.value.ranges) {
+                for (const i of overlap.key) {
                     this.on(charsets.range(range.min, range.max), targets[i], false)
                 }
             }
@@ -358,7 +358,7 @@ export class State<R> {
         )), target)
     }
 
-    on(trigger: charsets.CharSet, target: State<R>, optimized: boolean = true): State<R> {
+    on(trigger: charsets.CharSet, target: State<R>, optimized = true): State<R> {
         const index = optimized ? this._transitions.findIndex(t => t.target == target) : -1
         if (index < 0) {
             this._transitions.push(new Transition(trigger, target))
@@ -422,9 +422,9 @@ class ClosureState<R> extends State<R> {
     private static init<R>(closure: ClosureState<R>, automaton: Automaton<R>, closures: ClosureState<R>[]) {
         closures.push(closure)
         const states = closure.stateIndexes.map(index => automaton.states[index])
-        let transitions = ClosureState.nonOverlappingTransitions<R>(states)
+        const transitions = ClosureState.nonOverlappingTransitions<R>(states)
         const groupedTransitions = utils.group(transitions, t => t.trigger, t => t.target, charSetComparator)
-        for (let transition of groupedTransitions) {
+        for (const transition of groupedTransitions) {
             const targetIndexes = transition.value.map(target => automaton.states.indexOf(target))
             closure.on(transition.key, ClosureState.enclose(automaton, targetIndexes, closures))
         }
@@ -435,7 +435,7 @@ class ClosureState<R> extends State<R> {
     private static nonOverlappingTransitions<R>(states: State<R>[]) {
         const transitions = utils.flatMap(states, state => state.transitions)
         const tempState: State<R> = State.create()
-        for (let transition of transitions) {
+        for (const transition of transitions) {
             tempState.on(transition.trigger, transition.target, false)
         }
         tempState.reorganizeTriggerOverlaps()

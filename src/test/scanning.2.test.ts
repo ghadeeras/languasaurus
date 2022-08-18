@@ -34,7 +34,7 @@ describe("Scanner", () => {
 
     const myScanner = new MyScanner()
 
-    let streamText: string = ""
+    let streamText = ""
 
     it("handles empty strings", () => {
         const result = tokenize("")
@@ -62,7 +62,7 @@ describe("Scanner", () => {
         expect(arrow.tokenType).to.equal(myScanner.arrows)
         expect(arrow.lexeme).to.equal(streamText)
 
-        const [badArrow, ...nextTokens] = tokenize("<=-")
+        const [badArrow, ..._] = tokenize("<=-")
 
         expect(badArrow.tokenType).to.equal(myScanner.errorTokenType)
         expect(badArrow.lexeme).to.equal("<")
@@ -79,7 +79,7 @@ describe("Scanner", () => {
         expect(tightMargin.tokenType).to.equal(myScanner.margins)
         expect(tightMargin.lexeme).to.equal(streamText)
 
-        const [prefixMargin, ...nextTokens] = tokenize("|]")
+        const [prefixMargin, ..._] = tokenize("|]")
 
         expect(prefixMargin.tokenType).to.equal(myScanner.margins)
         expect(prefixMargin.lexeme).to.equal("|")
@@ -91,7 +91,7 @@ describe("Scanner", () => {
         expect(goodMargin.tokenType).to.equal(myScanner.margins)
         expect(goodMargin.lexeme).to.equal(streamText)
 
-        const [prefixMargin, ...nextTokens] = tokenize("|..]")
+        const [prefixMargin, ..._] = tokenize("|..]")
 
         expect(prefixMargin.tokenType).to.equal(myScanner.margins)
         expect(prefixMargin.lexeme).to.equal("|")
@@ -108,12 +108,12 @@ describe("Scanner", () => {
         expect(longFloat.tokenType).to.equal(myScanner.floats)
         expect(longFloat.lexeme).to.equal(streamText)
 
-        const [badFloat, ...nextTokens1] = tokenize("123A")
+        const [badFloat, ..._1] = tokenize("123A")
 
         expect(badFloat.tokenType).to.equal(myScanner.errorTokenType)
         expect(badFloat.lexeme).to.equal("123")
 
-        const [prefixFloat, ...nextTokens2] = tokenize("123.456A")
+        const [prefixFloat, ..._2] = tokenize("123.456A")
 
         expect(prefixFloat.tokenType).to.equal(myScanner.floats)
         expect(prefixFloat.lexeme).to.equal("123.456")    
@@ -130,12 +130,12 @@ describe("Scanner", () => {
         expect(longFunction.tokenType).to.equal(myScanner.functionKeywords)
         expect(longFunction.lexeme).to.equal(streamText)
 
-        const [badFunction, ...nextTokens1] = tokenize("fn")
+        const [badFunction, ..._1] = tokenize("fn")
 
         expect(badFunction.tokenType).to.equal(myScanner.errorTokenType)
         expect(badFunction.lexeme).to.equal("f")
 
-        const [prefixFunction, ...nextTokens2] = tokenize("functor")
+        const [prefixFunction, ..._2] = tokenize("functor")
 
         expect(prefixFunction.tokenType).to.equal(myScanner.functionKeywords)
         expect(prefixFunction.lexeme).to.equal("fun")
@@ -228,7 +228,7 @@ describe("Scanner", () => {
         streamText = text
         const stream = new streams.TextInputStream(text)
         const result: tokens.Token<any>[] = []
-        for (let token of myScanner.iterator(stream)) {
+        for (const token of myScanner.iterator(stream)) {
             result.push(token)
         }
         expect(result.pop()?.tokenType).to.equal(myScanner.eofTokenType)
