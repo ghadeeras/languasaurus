@@ -4,5 +4,6 @@
         "concat",
         "recognizables",
         "unmark"
-    ]
+    ],
+    "deno.enable": false
 }

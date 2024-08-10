@@ -11,11 +11,11 @@
   "author": "Ghadeer Abou-Saleh",
   "license": "ISC",
   "devDependencies": {
-    "@types/chai": "^4.3.3",
-    "@types/mocha": "^9.1.1",
-    "chai": "^4.3.6",
-    "mocha": "^10.0.0",
-    "nyc": "^15.1.0",
+    "@types/chai": "^4.3.17",
+    "@types/mocha": "^10.0.7",
+    "chai": "^5.1.1",
+    "mocha": "^10.7.3",
+    "nyc": "^17.0.0",
     "source-map-support": "^0.5.21"
   }
 }
