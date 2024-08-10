@@ -1,5 +1,5 @@
 # Languasaurus
-![CI Build](https://github.com/ghadeeras/languasaurus/workflows/ci-build/badge.svg?branch=master)
+![CI Build](https://github.com/ghadeeras/languasaurus/workflows/ci-build/badge.svg)
 
 Languasaurus is (eventually going to be) a language recognition tool to construct regular expressions and lexical and syntax analyzers (i.e. scanners and parsers).
 
