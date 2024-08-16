@@ -47,7 +47,7 @@ describe("automata", () => {
             expect(automaton.transientStates).to.not.include(s)
         })
 
-        it(">>>encapsulates its matcher well", () => {
+        it("encapsulates its matcher well", () => {
             const matcher = automaton.newMatcher()
             expect(matcher.lastRecognized).to.be.empty
             expect(matcher.recognized).to.be.empty

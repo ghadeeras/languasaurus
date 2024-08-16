@@ -2,9 +2,10 @@ import * as tokens from "./tokens";
 
 export class Grammar<T> {
 
-    readonly optionality: Map<Symbol<any>, boolean> = this.apply(new OptionalityChecker())
-    readonly firstSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FirstSetDeriver(this.optionality))
-    readonly followSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FollowSetDeriver(this.firstSets))
+    private optionality: Map<Symbol<any>, boolean> = this.apply(new OptionalityChecker())
+    private firstSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FirstSetDeriver(this.optionality))
+    private followSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FollowSetDeriver(this.optionality, this.firstSets))
+
     readonly symbols: Set<Symbol<any>> = new Set(this.optionality.keys())
     
     constructor(readonly start: Symbol<T>) {
@@ -13,6 +14,22 @@ export class Grammar<T> {
     private apply<R>(visitor: RecursiveVisitor<R>): Map<Symbol<any>, R> {
         this.start.accept(visitor)
         return visitor.cache
+    }
+
+    isOptional<T>(symbol: Symbol<T>): boolean {
+        return this.optionality.get(symbol) ?? this.notFound(symbol)
+    }
+
+    firstSetOf<T>(symbol: Symbol<T>): TokenTypeSet {
+        return this.firstSets.get(symbol) ?? this.notFound(symbol)
+    }
+
+    followSetOf<T>(symbol: Symbol<T>): TokenTypeSet {
+        return this.followSets.get(symbol) ?? this.notFound(symbol)
+    }
+
+    private notFound<T, R>(symbol: Symbol<T>): R {
+        throw new Error("Symbol not found: " + symbol)
     }
 
 }
@@ -112,6 +129,14 @@ export interface Production<T extends string, D extends Definition> extends Node
 export interface Lazy<T> extends Repeatable<T> {
 
     readonly symbol: Node<T>
+
+}
+
+export interface Mapped<T, R> extends Symbol<R> {
+
+    readonly symbol: Symbol<T>
+    readonly toMapper: (v: T) => R
+    readonly fromMapper: (v: R) => T
 
 }
 
@@ -236,6 +261,18 @@ class LazyImpl<S> extends RepeatableImpl<S> implements Lazy<S> {
     
 }
 
+class MappedImpl<S, T> extends SymbolImpl<T> implements Mapped<S, T> {
+
+    constructor(readonly symbol: Symbol<S>, readonly toMapper: (v: S) => T, readonly fromMapper: (v: T) => S) {
+        super()
+    }
+
+    accept<R>(visitor: Visitor<R>): R {
+        return visitor.visitMapped(this)
+    }
+
+}
+
 export interface Visitor<R> {
     visitOptional<T>(symbol: Optional<T>): R;
     visitZeroOrMore<T>(symbol: ZeroOrMore<T>): R;
@@ -244,6 +281,7 @@ export interface Visitor<R> {
     visitChoice<P extends Node<any>[]>(symbol: Choice<P>): R;
     visitProduction<T extends string, D extends Definition>(symbol: Production<T, D>): R;
     visitLazy<S>(symbol: Lazy<S>): R;
+    visitMapped<S, T>(symbol: Mapped<S, T>): R;
 }
 
 abstract class RecursiveVisitor<R> implements Visitor<R> {
@@ -261,11 +299,10 @@ abstract class RecursiveVisitor<R> implements Visitor<R> {
         this.visited.add(symbol)
         try {
             let result = this.cache.get(symbol)
-            if (!this.reprocessCached && result !== undefined) {
-                return result
+            if (this.reprocessCached || result == undefined) {
+                result = resultSupplier(symbol)
+                this.cache.set(symbol, result)
             }
-            result = resultSupplier(symbol)
-            this.cache.set(symbol, result)
             return result
         } finally {
             this.visited.delete(symbol)
@@ -300,7 +337,15 @@ abstract class RecursiveVisitor<R> implements Visitor<R> {
         return this.pass(symbol, s => this.doVisitLazy(s))
     }
 
+    visitMapped<S, T>(symbol: Mapped<S, T>): R {
+        return this.pass(symbol, s => this.doVisitMapped(s))
+    }
+
     doVisitLazy<S>(symbol: Lazy<S>): R {
+        return symbol.symbol.accept(this)
+    }
+
+    doVisitMapped<S, T>(symbol: Mapped<S, T>): R {
         return symbol.symbol.accept(this)
     }
 
@@ -320,10 +365,12 @@ class OptionalityChecker extends RecursiveVisitor<boolean> {
     }
 
     protected doVisitOptional<T>(symbol: Optional<T>): boolean {
+        symbol.symbol.accept(this)
         return true
     }
 
     protected doVisitZeroOrMore<T>(symbol: ZeroOrMore<T>): boolean {
+        symbol.symbol.accept(this)
         return true
     }
 
@@ -336,11 +383,11 @@ class OptionalityChecker extends RecursiveVisitor<boolean> {
     }
 
     protected doVisitChoice<P extends Node<any>[]>(symbol: Choice<P>): boolean {
-        return symbol.productions.some(p => p.accept(this))
+        return symbol.productions.reduce((a, p) => p.accept(this) || a, false)
     }
 
     protected doVisitProduction<T extends string, D extends Definition>(symbol: Production<T, D>): boolean {
-        return symbol.order.every(k => symbol.definition[k].accept(this))
+        return symbol.order.reduce((a, k) => symbol.definition[k].accept(this) && a, true)
     }
     
 }
@@ -374,7 +421,7 @@ class FirstSetDeriver extends RecursiveVisitor<TokenTypeSet> {
     }
 
     protected doVisitProduction<T extends string, D extends Definition>(symbol: Production<T, D>): TokenTypeSet {
-        const firstNonOptional = symbol.order.findIndex(k => this.optionality.get(symbol.definition[k]))
+        const firstNonOptional = symbol.order.findIndex(k => !this.optionality.get(symbol.definition[k]))
         const keys = firstNonOptional > 0 ? symbol.order.slice(0, firstNonOptional + 1) : symbol.order
         return keys
             .map(k => symbol.definition[k].accept(this))
@@ -387,7 +434,7 @@ class FollowSetDeriver extends RecursiveVisitor<TokenTypeSet> {
 
     private stack: TokenTypeSet[] = [new Set()]
 
-    constructor(private firstSets: Map<Symbol<any>, TokenTypeSet>) {
+    constructor(private optionality: Map<Symbol<any>, boolean>, private firstSets: Map<Symbol<any>, TokenTypeSet>) {
         super(true, () => new Set());
     }
 
@@ -444,7 +491,7 @@ class FollowSetDeriver extends RecursiveVisitor<TokenTypeSet> {
             s = symbol.definition[symbol.order[i]]
             followSet = this.enter(merge(followSet, nextFirstSet), () => s.accept(this))
         }
-        return followSet.size > 0 ? merge(this.cached(symbol), this.top) : new Set()
+        return this.optionality.get(symbol) ? merge(this.cached(symbol), this.top) : new Set()
     }
 
 }
