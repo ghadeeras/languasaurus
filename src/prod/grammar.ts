@@ -62,7 +62,7 @@ export function production<T extends string, D extends Definition>(type: T, defi
     return new ProductionImpl(type, definition, order)
 }
 
-export function recursively<T>(symbolSupplier: () => Node<T>) {
+export function recursively<T>(symbolSupplier: () => Symbol<T>) {
     return new LazyImpl(symbolSupplier)
 }
 
@@ -72,6 +72,8 @@ export interface Symbol<T> {
 
     process(value: T): void
 
+    mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): Mapped<T, R>
+
 }
 
 export interface Optional<T> extends Symbol<T | null> {
@@ -80,23 +82,11 @@ export interface Optional<T> extends Symbol<T | null> {
 
 }
 
-export interface ZeroOrMore<T> extends Symbol<T[]> {
-
-    readonly symbol: Repeatable<T> 
-
-}
-
-export interface OneOrMore<T> extends Symbol<[T, ...T[]]> {
-
-    readonly symbol: Repeatable<T> 
-
-}
-
 export interface Repeatable<T> extends Symbol<T> {
 
     optional(): Optional<T>
-    zeroOrMore(): ZeroOrMore<T>
-    oneOrMore(): OneOrMore<T>
+    zeroOrMore(): Symbol<T[]>
+    oneOrMore(): Symbol<[T, ...T[]]>
 
 }
 
@@ -126,17 +116,17 @@ export interface Production<T extends string, D extends Definition> extends Node
 
 }
 
-export interface Lazy<T> extends Repeatable<T> {
+export interface Lazy<T> extends Symbol<T> {
 
-    readonly symbol: Node<T>
+    readonly symbol: Symbol<T>
 
 }
 
-export interface Mapped<T, R> extends Symbol<R> {
+export interface Mapped<S, T> extends Symbol<T> {
 
-    readonly symbol: Symbol<T>
-    readonly toMapper: (v: T) => R
-    readonly fromMapper: (v: R) => T
+    readonly symbol: Symbol<S>
+    readonly toMapper: (v: S) => T
+    readonly fromMapper: (v: T) => S
 
 }
 
@@ -145,6 +135,10 @@ abstract class SymbolImpl<T> implements Symbol<T> {
     abstract accept<R>(visitor: Visitor<R>): R
     
     process(value: T) {}
+
+    mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): Mapped<T, R> {
+        return new MappedImpl(this, toMapper, fromMapper)
+    }
 
 }
 
@@ -160,42 +154,18 @@ class OptionalImpl<T> extends SymbolImpl<T | null> implements Optional<T> {
 
 }
 
-class ZeroOrMoreImpl<T> extends SymbolImpl<T[]> implements ZeroOrMore<T> {
-
-    constructor(readonly symbol: Repeatable<T>) {
-        super()
-    }
-
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitZeroOrMore(this)
-    }
-
-}
-
-class OneOrMoreImpl<T> extends SymbolImpl<[T, ...T[]]> implements OneOrMore<T> {
-
-    constructor(readonly symbol: Repeatable<T>) {
-        super()
-    } 
-
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitOneOrMore(this)
-    }
-
-}
-
 abstract class RepeatableImpl<T> extends SymbolImpl<T> implements Repeatable<T> {
 
     optional(): Optional<T> {
         return new OptionalImpl(this)
     }
 
-    zeroOrMore(): ZeroOrMore<T> {
-        return new ZeroOrMoreImpl(this)
+    zeroOrMore(): Symbol<T[]> {
+        return zeroOrMore(this)
     }
 
-    oneOrMore(): OneOrMore<T> {
-        return new OneOrMoreImpl(this)
+    oneOrMore(): Symbol<[T, ...T[]]> {
+        return oneOrMore(this)
     }
 
 }
@@ -240,15 +210,15 @@ class ProductionImpl<T extends string, D extends Definition> extends RepeatableI
 
 }
 
-class LazyImpl<S> extends RepeatableImpl<S> implements Lazy<S> {
+class LazyImpl<T> extends SymbolImpl<T> implements Lazy<T> {
 
-    private _symbol: Node<S> | null = null
+    private _symbol: Symbol<T> | null = null
 
-    constructor(private symbolSupplier: () => Node<S>) {
+    constructor(private symbolSupplier: () => Symbol<T>) {
         super()
     }
 
-    get symbol(): Node<S> {
+    get symbol(): Symbol<T> {
         if (this._symbol === null) {
             this._symbol = this.symbolSupplier()
         }
@@ -275,8 +245,6 @@ class MappedImpl<S, T> extends SymbolImpl<T> implements Mapped<S, T> {
 
 export interface Visitor<R> {
     visitOptional<T>(symbol: Optional<T>): R;
-    visitZeroOrMore<T>(symbol: ZeroOrMore<T>): R;
-    visitOneOrMore<T>(symbol: OneOrMore<T>): R;
     visitTerminal<T>(symbol: Terminal<T>): R;
     visitChoice<P extends Node<any>[]>(symbol: Choice<P>): R;
     visitProduction<T extends string, D extends Definition>(symbol: Production<T, D>): R;
@@ -313,14 +281,6 @@ abstract class RecursiveVisitor<R> implements Visitor<R> {
         return this.pass(symbol, s => this.doVisitOptional(s))
     }
 
-    visitZeroOrMore<T>(symbol: ZeroOrMore<T>): R {
-        return this.pass(symbol, s => this.doVisitZeroOrMore(s))
-    }
-
-    visitOneOrMore<T>(symbol: OneOrMore<T>): R {
-        return this.pass(symbol, s => this.doVisitOneOrMore(s))
-    }
-
     visitTerminal<T>(symbol: Terminal<T>): R {
         return this.pass(symbol, s => this.doVisitTerminal(s))
     }
@@ -350,8 +310,6 @@ abstract class RecursiveVisitor<R> implements Visitor<R> {
     }
 
     protected abstract doVisitOptional<T>(symbol: Optional<T>): R
-    protected abstract doVisitZeroOrMore<T>(symbol: ZeroOrMore<T>): R
-    protected abstract doVisitOneOrMore<T>(symbol: OneOrMore<T>): R
     protected abstract doVisitTerminal<T>(symbol: Terminal<T>): R
     protected abstract doVisitChoice<P extends Node<any>[]>(symbol: Choice<P>): R
     protected abstract doVisitProduction<T extends string, D extends Definition>(symbol: Production<T, D>): R
@@ -367,15 +325,6 @@ class OptionalityChecker extends RecursiveVisitor<boolean> {
     protected doVisitOptional<T>(symbol: Optional<T>): boolean {
         symbol.symbol.accept(this)
         return true
-    }
-
-    protected doVisitZeroOrMore<T>(symbol: ZeroOrMore<T>): boolean {
-        symbol.symbol.accept(this)
-        return true
-    }
-
-    protected doVisitOneOrMore<T>(symbol: OneOrMore<T>): boolean {
-        return symbol.symbol.accept(this)
     }
 
     protected doVisitTerminal<T>(symbol: Terminal<T>): boolean {
@@ -399,14 +348,6 @@ class FirstSetDeriver extends RecursiveVisitor<TokenTypeSet> {
     }
     
     protected doVisitOptional<T>(symbol: Optional<T>): TokenTypeSet {
-        return symbol.symbol.accept(this)
-    }
-
-    protected doVisitZeroOrMore<T>(symbol: ZeroOrMore<T>): TokenTypeSet {
-        return symbol.symbol.accept(this)
-    }
-
-    protected doVisitOneOrMore<T>(symbol: OneOrMore<T>): TokenTypeSet {
         return symbol.symbol.accept(this)
     }
 
@@ -461,16 +402,6 @@ class FollowSetDeriver extends RecursiveVisitor<TokenTypeSet> {
         return merge(this.cached(symbol), this.top)
     }
 
-    protected doVisitZeroOrMore<T>(symbol: ZeroOrMore<T>): TokenTypeSet {
-        symbol.symbol.accept(this)
-        return merge(this.cached(symbol), this.top)
-    }
-
-    protected doVisitOneOrMore<T>(symbol: OneOrMore<T>): TokenTypeSet {
-        const set = symbol.symbol.accept(this)
-        return set.size > 0 ? merge(this.cached(symbol), this.top) : new Set()
-    }
-
     protected doVisitTerminal<T>(symbol: Terminal<T>): TokenTypeSet {
         return new Set()
     }
@@ -498,4 +429,46 @@ class FollowSetDeriver extends RecursiveVisitor<TokenTypeSet> {
 
 function merge<T>(s1: Set<T>, s2: Set<T>): Set<T> {
     return new Set([...s1, ...s2])
+}
+
+function zeroOrMore<T>(symbol: Repeatable<T>): Symbol<T[]> {
+    return listSymbols(symbol).list.mapped<T[]>(n => toList(n), l => toLinkedList(l))
+}
+
+function oneOrMore<T>(symbol: Repeatable<T>): Symbol<[T, ...T[]]> {
+    return listSymbols(symbol).con.mapped<[T, ...T[]]>(n => toNonEmptyList(n), l => toCon(l))
+}
+
+type LinkedList<T> = Con<T> | null
+type Con<T> = ParseTreeNode<"con", {
+    head: T
+    tail: LinkedList<T>
+}>
+
+function listSymbols<T>(symbol: Symbol<T>) {
+    const list = recursively(() => con.optional())
+    const con: Node<Con<T>> = production("con", { head: symbol, tail: list })
+    return { list, con }
+}
+
+function toList<T>(n: LinkedList<T>): T[] {
+    return n !== null ? toNonEmptyList<T>(n) : [];
+}
+
+function toNonEmptyList<T>(n: Con<T>): [T, ...T[]] {
+    return [n.content.head, ...toList(n.content.tail)];
+}
+
+function toLinkedList<T>(l: T[]): LinkedList<T> {
+    return l.length > 0 ? toCon<T>(l) : null;
+}
+
+function toCon<T>(l: T[]): Con<T> {
+    return {
+        type: "con",
+        content: {
+            head: l[0],
+            tail: toLinkedList(l.slice(1))
+        }
+    };
 }
