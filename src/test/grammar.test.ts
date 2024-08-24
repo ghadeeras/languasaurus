@@ -3,17 +3,17 @@ import * as tokens from "../prod/tokens.js";
 import * as gram from "../prod/grammar.js";
 import { expect } from 'chai'
 
-const booleanTerm = gram.terminal(new tokens.BooleanTokenType(rex.choice(
+const booleanTerm = gram.terminal(tokens.booleanToken(rex.choice(
     rex.word("true"), 
     rex.word("false")
 )))
-const intTerm = gram.terminal(new tokens.IntegerTokenType(rex.oneOrMore(rex.charIn("0-9"))))
-const floatTerm = gram.terminal(new tokens.FloatTokenType(rex.concat(
+const intTerm = gram.terminal(tokens.integerToken(rex.oneOrMore(rex.charIn("0-9"))))
+const floatTerm = gram.terminal(tokens.floatToken(rex.concat(
     rex.zeroOrMore(rex.charIn("0-9")), 
     rex.char("."), 
     rex.oneOrMore(rex.charIn("0-9"))
 )))
-const identifier = gram.terminal(new tokens.TextualTokenType(rex.concat(
+const identifier = gram.terminal(tokens.textualToken(rex.concat(
     rex.oneOrMore(rex.choice(
         rex.charIn("a-z"),
         rex.charIn("A-Z")
@@ -68,8 +68,6 @@ describe("Grammar", () => {
             const numExp = gram.production("num", {val: intTerm});
             const exp = gram.choice(varExp, numExp)
             const g = new gram.Grammar(exp)
-
-            exp.process({type: "num", content: {val: 123}})
 
             expect(g).to.satisfy(containmentOf(exp))
             expect(g).to.satisfy(containmentOf(varExp))

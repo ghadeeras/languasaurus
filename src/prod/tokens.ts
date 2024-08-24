@@ -15,7 +15,7 @@ export interface TokenType<T> {
 
 class TokenTypeImpl<T> implements TokenType<T> {
 
-    protected constructor(
+    constructor(
         readonly pattern: regex.RegEx,
         private readonly parser: (lexeme: string) => T
     ) {
@@ -38,36 +38,20 @@ class TokenTypeImpl<T> implements TokenType<T> {
 
 }
 
-export class TextualTokenType extends TokenTypeImpl<string> {
-    
-    constructor(pattern: regex.RegEx) {
-        super(pattern, s => s)
-    }
-
+export function textualToken(pattern: regex.RegEx): TokenType<string> {
+    return new TokenTypeImpl(pattern, s => s)
 }
 
-export class FloatTokenType extends TokenTypeImpl<number> {
-    
-    constructor(pattern: regex.RegEx) {
-        super(pattern, s => Number.parseFloat(s))
-    }
-
+export function floatToken(pattern: regex.RegEx): TokenType<number> {
+    return new TokenTypeImpl(pattern, s => Number.parseFloat(s))
 }
 
-export class IntegerTokenType extends TokenTypeImpl<number> {
-    
-    constructor(pattern: regex.RegEx) {
-        super(pattern, s => Number.parseInt(s))
-    }
-
+export function integerToken(pattern: regex.RegEx): TokenType<number> {
+    return new TokenTypeImpl(pattern, s => Number.parseInt(s))
 }
 
-export class BooleanTokenType extends TokenTypeImpl<boolean> {
-    
-    constructor(pattern: regex.RegEx) {
-        super(pattern, s => pattern.matches(s))
-    }
-
+export function booleanToken(pattern: regex.RegEx): TokenType<boolean> {
+    return new TokenTypeImpl(pattern, s => s === "true")
 }
 
 export class Token<T> {

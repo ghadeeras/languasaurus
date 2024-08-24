@@ -6,8 +6,8 @@ import * as utils from './utils.js'
 
 export class Scanner {
 
-    readonly errorTokenType: tokens.TextualTokenType = new tokens.TextualTokenType(regex.oneOrMore(regex.charIn("\u0000-\uffff")))
-    readonly eofTokenType: tokens.BooleanTokenType = new tokens.BooleanTokenType(regex.word("EOF"))
+    readonly errorTokenType: tokens.TokenType<string> = tokens.textualToken(regex.oneOrMore(regex.charIn("\u0000-\uffff")))
+    readonly eofTokenType: tokens.TokenType<boolean> = tokens.booleanToken(regex.word("EOF")).parsedAs(lexeme => true)
 
     private readonly tokenTypes: TokenTypeWrapper<any>[] = []
     private readonly _tokenTypeNames: Map<tokens.TokenType<any>, string> = new Map()
@@ -64,31 +64,31 @@ export class Scanner {
     }
 
     protected string(pattern: regex.RegEx) {
-        return this.define(new tokens.TextualTokenType(pattern))
+        return this.define(tokens.textualToken(pattern))
     }
 
     protected float(pattern: regex.RegEx) {
-        return this.define(new tokens.FloatTokenType(pattern))
+        return this.define(tokens.floatToken(pattern))
     }
 
     protected integer(pattern: regex.RegEx) {
-        return this.define(new tokens.IntegerTokenType(pattern))
+        return this.define(tokens.integerToken(pattern))
     }
 
     protected boolean(pattern: regex.RegEx) {
-        return this.define(new tokens.BooleanTokenType(pattern))
+        return this.define(tokens.booleanToken(pattern))
     }
 
     protected keyword(word: string) {
-        return this.boolean(regex.word(word))
+        return this.boolean(regex.word(word)).parsedAs(lexeme => true)
     }
 
     protected op(op: string) {
-        return this.boolean(regex.word(op))
+        return this.boolean(regex.word(op)).parsedAs(lexeme => true)
     }
 
     protected delimiter(del: string) {
-        return this.boolean(regex.word(del))
+        return this.boolean(regex.word(del)).parsedAs(lexeme => true)
     }
 
     *iterator(stream: streams.InputStream<number>) {

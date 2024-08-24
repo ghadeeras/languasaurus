@@ -1,4 +1,5 @@
-import * as tokens from "./tokens";
+import * as tokens from "./tokens.js";
+import { randomInt } from "./utils.js";
 
 export class Grammar<T> {
 
@@ -70,9 +71,9 @@ export interface Symbol<T> {
 
     accept<R>(visitor: Visitor<R>): R
 
-    process(value: T): void
-
     mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): Mapped<T, R>
+
+    random(): T
 
 }
 
@@ -133,9 +134,9 @@ export interface Mapped<S, T> extends Symbol<T> {
 abstract class SymbolImpl<T> implements Symbol<T> {
 
     abstract accept<R>(visitor: Visitor<R>): R
-    
-    process(value: T) {}
 
+    abstract random(): T;
+    
     mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): Mapped<T, R> {
         return new MappedImpl(this, toMapper, fromMapper)
     }
@@ -150,6 +151,10 @@ class OptionalImpl<T> extends SymbolImpl<T | null> implements Optional<T> {
 
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitOptional(this)
+    }
+
+    random(): T | null {
+        return randomInt(2) === 1 ? this.symbol.random() : null
     }
 
 }
@@ -179,6 +184,10 @@ class TerminalImpl<T> extends RepeatableImpl<T> implements Terminal<T> {
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitTerminal(this)
     }
+    
+    random(): T {
+        return this.tokenType.parse(this.tokenType.pattern.random())
+    }
 
 }
 
@@ -194,6 +203,11 @@ class ChoiceImpl<P extends Node<any>[]> extends RepeatableImpl<InferFromNodes<P>
         return visitor.visitChoice(this)
     }
 
+    random(): InferFromNodes<P> {
+        const i = randomInt(this.productions.length)
+        return this.productions[i].random()
+    }
+
 }
 
 class ProductionImpl<T extends string, D extends Definition> extends RepeatableImpl<ParseTreeNode<T, Structure<D>>> implements Production<T, D> {
@@ -206,6 +220,17 @@ class ProductionImpl<T extends string, D extends Definition> extends RepeatableI
 
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitProduction(this)
+    }
+
+    random(): ParseTreeNode<T, Structure<D>> {
+        const content: Partial<ParseTreeNode<T, Structure<D>>["content"]> = {}
+        for (const key of this.order) {
+            content[key] = this.definition[key].random()
+        }
+        return {
+            type: this.type,
+            content: content as ParseTreeNode<T, Structure<D>>["content"]
+        }
     }
 
 }
@@ -228,6 +253,10 @@ class LazyImpl<T> extends SymbolImpl<T> implements Lazy<T> {
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitLazy(this)
     }
+
+    random(): T {
+        return this.symbol.random()
+    }
     
 }
 
@@ -239,6 +268,10 @@ class MappedImpl<S, T> extends SymbolImpl<T> implements Mapped<S, T> {
 
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitMapped(this)
+    }
+
+    random(): T {
+        return this.toMapper(this.symbol.random())
     }
 
 }
