@@ -4,6 +4,7 @@ export type Reducer<A, B> = (a: A, b: B) => A;
 export type Getter<A, B> = (a: A) => B;
 export type Mapper<A, B> = (a: A, i: number) => B;
 export type Consumer<T> = (v: T) => void
+export type Producer<T> = Consumer<Consumer<T>>
 
 export type Pair<K, V> = {
     key: K;
@@ -126,4 +127,86 @@ export function randomInt(max: number): number {
 
 export function bug<T>(): T {
     throw new Error("Should never happen!!!")
+}
+
+export class LazyEvaluator {
+
+    private resolutions: (() => void)[] = []
+    private _computationSize: number = 0
+
+    evaluate<T>(expression: () => T): LazyPromise<T> {
+        return new LazyPromise(resolution => this.resolutions.push(resolution), consumer => {
+            consumer(expression())
+        })
+    }
+
+    await<T>(promise: LazyPromise<T>): T {
+        const result: T[] = []
+        promise.then(value => result.push(value))
+        while (this.resolutions.length > 0 && result.length == 0) {
+            this._computationSize++
+            const resolution = this.resolutions.shift()
+            if (resolution !== undefined) {
+                resolution()
+            }
+        }
+        if (result.length === 0) {
+            throw new Error("Could not resolve promise!!!")
+        }
+        return result[0]
+    }
+
+    get computationSize(): number {
+        return this._computationSize
+    }
+
+}
+
+export class LazyPromise<T> {
+
+    private result: T[] = []
+    private consumers: Consumer<T>[] = []
+
+    constructor(private scheduler: Consumer<() => void>, producer: Producer<T>) {
+        producer(value => this.resolve(value))
+    }
+
+    private resolve(value: T) {
+        if (this.result.length > 0) {
+            throw new Error("Only one resolution is expected!")
+        }
+        this.result.push(value);
+        while (this.consumers.length > 0) {
+            const consumer = this.consumers.shift();
+            if (consumer !== undefined) {
+                this.schedule(consumer, value);
+            }
+        }
+    }
+
+    private schedule(consumer: Consumer<T>, value: T) {
+        this.scheduler(() => consumer(value));
+    }
+
+    private consume(consumer: Consumer<T>) {
+        if (this.result.length > 0) {
+            this.schedule(consumer, this.result[0])
+        } else {
+            this.consumers.push(consumer)
+        }
+    }
+
+    then<R>(mapper: (value: T) => R | LazyPromise<R>): LazyPromise<R> {
+        return new LazyPromise(this.scheduler, consumer => {
+            this.consume(result => {
+                const newResult = mapper(result);
+                if (newResult instanceof LazyPromise) {
+                    newResult.consume(consumer)
+                } else {
+                    consumer(newResult)
+                }
+            })
+        })
+    }
+
 }
