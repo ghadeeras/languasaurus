@@ -78,7 +78,11 @@ export interface Symbol<T> {
 
     accept<R>(visitor: Visitor<R>): R
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T>
+    random(): T
+
+    asyncRandom(evaluator: utils.LazyEvaluator, depth?: number): utils.SimplePromise<T>
+
+    size: number
 
 }
 
@@ -151,7 +155,13 @@ abstract class SymbolImpl<T> implements Symbol<T> {
 
     abstract accept<R>(visitor: Visitor<R>): R
 
-    abstract random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T>;
+    abstract asyncRandom(evaluator: utils.LazyEvaluator, depth?: number): utils.SimplePromise<T>;
+
+    abstract size: number;
+
+    random(): T {
+        return utils.evaluate(evaluator => this.asyncRandom(evaluator, 0))
+    }
     
 }
 
@@ -193,25 +203,30 @@ abstract class RepeatableImpl<T> extends SymbolImpl<T> implements Repeatable<T> 
 
 class OptionalImpl<T> extends NonRepeatableImpl<T | null> implements Optional<T> {
 
+    readonly size: number = this.symbol.size + 1
+    
     constructor(readonly symbol: Repeatable<T>) {
         super()
-    } 
-
+    }
+    
     accept<R>(visitor: Visitor<R>): R {
         return visitor.visitOptional(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T | null> {
-        return (utils.randomInt(evaluator.computationSize) < 256 
-            ? this.symbol.random(evaluator).then<T | null>(v => v)
-            : evaluator.evaluate<T | null>(() => null)
-        )
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T | null> {
+        const dice = Math.random() * this.size * (2 ** (-depth / 256));
+        return (dice > 1
+            ? this.symbol.asyncRandom(evaluator, depth)
+            : evaluator(() => null)
+        ) as utils.SimplePromise<T | null>
     }
 
 }
 
 class TerminalImpl<T> extends RepeatableImpl<T> implements Terminal<T> {
 
+    readonly size: number = 1
+    
     constructor(readonly tokenType: tokens.TokenType<T>) {
         super()
     }
@@ -220,8 +235,8 @@ class TerminalImpl<T> extends RepeatableImpl<T> implements Terminal<T> {
         return visitor.visitTerminal(this)
     }
     
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T> {
-        return evaluator.evaluate(() => (this.tokenType.parse(this.tokenType.pattern.randomString(0.125))))
+    asyncRandom(evaluator: utils.LazyEvaluator): utils.SimplePromise<T> {
+        return evaluator(() => this.tokenType.parse(this.tokenType.pattern.randomString(0.125)))
     }
 
 }
@@ -229,7 +244,8 @@ class TerminalImpl<T> extends RepeatableImpl<T> implements Terminal<T> {
 class ChoiceImpl<P extends Repeatable<any>[]> extends RepeatableImpl<InferFromProductions<P>> implements Choice<P> {
 
     readonly kind = "choice"
-    
+    readonly size: number = this.productions.map(p => p.size).reduce((a, b) => a + b, 0)
+
     constructor(readonly productions: P) {
         super()
     }
@@ -238,9 +254,13 @@ class ChoiceImpl<P extends Repeatable<any>[]> extends RepeatableImpl<InferFromPr
         return visitor.visitChoice(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<InferFromProductions<P>> {
-        const i = utils.randomInt(this.productions.length)
-        return this.productions[i].random(evaluator)
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<InferFromProductions<P>> {
+        let dice = utils.randomInt(this.size)
+        let i = 0
+        while (dice > this.productions[i].size) {
+            dice -= this.productions[i++].size
+        }
+        return this.productions[i].asyncRandom(evaluator, depth)
     }
 
 }
@@ -248,6 +268,7 @@ class ChoiceImpl<P extends Repeatable<any>[]> extends RepeatableImpl<InferFromPr
 class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> implements Production<D> {
 
     readonly kind = "production"
+    readonly size: number = this.order.map(k => this.definition[k].size).reduce((a, b) => a * b, 1)
     
     constructor(readonly definition: D, readonly order: (keyof D)[]) {
         super()
@@ -257,17 +278,18 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
         return visitor.visitProduction(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<Structure<D>> {
-        let content = evaluator.evaluate<Partial<Structure<D>>>(() => ({}))
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Structure<D>> {
+        let content = evaluator<Partial<Structure<D>>>(() => ({}))
         for (const key of this.order) {
-            content = content.then(c => 
-                this.definition[key].random(evaluator).then(v => {
+            content = content.then(c => {
+                const value = this.definition[key].asyncRandom(evaluator, depth + 1);
+                return value.then(v => {
                     c[key] = v
                     return c
                 })
-            )
+            })
         }
-        return content as utils.LazyPromise<Structure<D>>
+        return content as utils.SimplePromise<Structure<D>>
     }
 
 }
@@ -275,6 +297,7 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
 class LazyImpl<T> extends RepeatableImpl<T> implements Lazy<T> {
 
     readonly symbol: Repeatable<T>
+    readonly size: number = 1
 
     constructor(symbolSupplier: (self: Repeatable<T>) => Repeatable<T>) {
         super()
@@ -285,14 +308,16 @@ class LazyImpl<T> extends RepeatableImpl<T> implements Lazy<T> {
         return visitor.visitLazy(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T> {
-        return this.symbol.random(evaluator)
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
+        return this.symbol.asyncRandom(evaluator, depth)
     }
     
 }
 
 class MappedNonRepeatableImpl<S, T> extends NonRepeatableImpl<T> implements MappedNonRepeatable<S, T> {
 
+    readonly size: number = this.symbol.size
+    
     constructor(readonly symbol: NonRepeatable<S>, readonly toMapper: (v: S) => T, readonly fromMapper: (v: T) => S) {
         super()
     }
@@ -301,14 +326,16 @@ class MappedNonRepeatableImpl<S, T> extends NonRepeatableImpl<T> implements Mapp
         return visitor.visitMappedNonRepeatable(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T> {
-        return this.symbol.random(evaluator).then(this.toMapper)
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
+        return this.symbol.asyncRandom(evaluator, depth).then(this.toMapper)
     }
 
 }
 
 class MappedRepeatableImpl<S, T> extends RepeatableImpl<T> implements MappedRepeatable<S, T> {
 
+    readonly size: number = this.symbol.size
+    
     constructor(readonly symbol: Repeatable<S>, readonly toMapper: (v: S) => T, readonly fromMapper: (v: T) => S) {
         super()
     }
@@ -317,8 +344,8 @@ class MappedRepeatableImpl<S, T> extends RepeatableImpl<T> implements MappedRepe
         return visitor.visitMappedRepeatable(this)
     }
 
-    random(evaluator: utils.LazyEvaluator): utils.LazyPromise<T> {
-        return this.symbol.random(evaluator).then(this.toMapper)
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number): utils.SimplePromise<T> {
+        return this.symbol.asyncRandom(evaluator, depth).then(this.toMapper)
     }
 
 }

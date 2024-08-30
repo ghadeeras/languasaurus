@@ -2,7 +2,6 @@ import * as rex from "../prod/regex.js";
 import * as tokens from "../prod/tokens.js";
 import * as gram from "../prod/grammar.js";
 import { expect } from 'chai'
-import { LazyEvaluator } from "../prod/utils.js";
 
 const booleanLit = gram.terminal(tokens.booleanToken(rex.choice(
     rex.word("true"), 
@@ -314,14 +313,14 @@ describe("Grammar", () => {
 
     describe("random", () => {
 
-        const productions = gram.recursively("exp", (self: gram.Repeatable<any>) => {
+        const productions = gram.recursively("exp", self => {
             const funCall = gram.production({
                 funName: identifier.optional(),
                 parenOpen,
                 arg: self,
                 parenClose
             }).mapped(
-                n => ({ funName: n.funName, arg: n.arg}), 
+                n => n.funName !== null ? ({ funName: n.funName, arg: n.arg}) : n.arg, 
                 unsupported
             )
             const term = gram.choice(
@@ -359,9 +358,8 @@ describe("Grammar", () => {
         })
 
         // it("generates random parse trees", () => {
-        //     var evaluator = new LazyEvaluator()
-        //     const tree = productions.exp.random(evaluator);
-        //     console.log(JSON.stringify(evaluator.await(tree), null, 4))
+        //     const tree = productions.exp.random()
+        //     console.log(JSON.stringify(tree, null, 2))
         // })
 
     })

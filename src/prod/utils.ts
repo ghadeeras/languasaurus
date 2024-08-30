@@ -129,22 +129,31 @@ export function bug<T>(): T {
     throw new Error("Should never happen!!!")
 }
 
-export class LazyEvaluator {
+export type Expression<T> = () => T 
+export type LazyEvaluator = <T>(expression: Expression<T>) => SimplePromise<T>  
+export type AsyncExpression<T> = (evaluator: LazyEvaluator) => SimplePromise<T> 
+
+export function evaluate<T>(asyncExpression: AsyncExpression<T>): T {
+    const evaluator = new LazyEvaluatorImpl()
+    const promise = asyncExpression(expression => evaluator.evaluate(expression))
+    return evaluator.await(promise)
+}
+
+class LazyEvaluatorImpl {
 
     private resolutions: (() => void)[] = []
-    private _computationSize: number = 0
 
-    evaluate<T>(expression: () => T): LazyPromise<T> {
-        return new LazyPromise(resolution => this.resolutions.push(resolution), consumer => {
-            consumer(expression())
-        })
+    evaluate<T>(expression: () => T): SimplePromise<T> {
+        return new SimplePromise(
+            resolution => this.resolutions.push(resolution), 
+            consumer => this.resolutions.push(() => consumer(expression()))
+        )
     }
 
-    await<T>(promise: LazyPromise<T>): T {
+    await<T>(promise: SimplePromise<T>): T {
         const result: T[] = []
         promise.then(value => result.push(value))
         while (this.resolutions.length > 0 && result.length == 0) {
-            this._computationSize++
             const resolution = this.resolutions.shift()
             if (resolution !== undefined) {
                 resolution()
@@ -156,18 +165,14 @@ export class LazyEvaluator {
         return result[0]
     }
 
-    get computationSize(): number {
-        return this._computationSize
-    }
-
 }
 
-export class LazyPromise<T> {
+export class SimplePromise<T> {
 
     private result: T[] = []
     private consumers: Consumer<T>[] = []
 
-    constructor(private scheduler: Consumer<() => void>, producer: Producer<T>) {
+    constructor(private defer: Consumer<() => void>, producer: Producer<T>) {
         producer(value => this.resolve(value))
     }
 
@@ -179,31 +184,27 @@ export class LazyPromise<T> {
         while (this.consumers.length > 0) {
             const consumer = this.consumers.shift();
             if (consumer !== undefined) {
-                this.schedule(consumer, value);
+                this.defer(() => consumer(value));
             }
         }
     }
 
-    private schedule(consumer: Consumer<T>, value: T) {
-        this.scheduler(() => consumer(value));
-    }
-
-    private consume(consumer: Consumer<T>) {
+    private attach(consumer: Consumer<T>) {
         if (this.result.length > 0) {
-            this.schedule(consumer, this.result[0])
+            this.defer(() => consumer(this.result[0]))
         } else {
             this.consumers.push(consumer)
         }
     }
 
-    then<R>(mapper: (value: T) => R | LazyPromise<R>): LazyPromise<R> {
-        return new LazyPromise(this.scheduler, consumer => {
-            this.consume(result => {
-                const newResult = mapper(result);
-                if (newResult instanceof LazyPromise) {
-                    newResult.consume(consumer)
+    then<R>(mapper: (value: T) => R | SimplePromise<R>): SimplePromise<R> {
+        return new SimplePromise(this.defer, consumer => {
+            this.attach(value => {
+                const result = mapper(value);
+                if (result instanceof SimplePromise) {
+                    result.attach(consumer)
                 } else {
-                    consumer(newResult)
+                    consumer(result)
                 }
             })
         })
