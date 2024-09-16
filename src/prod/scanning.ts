@@ -217,6 +217,10 @@ class TokenTypeWrapper<T> implements tokens.TokenType<T> {
         return this.tokenType.parse(lexeme)
     }
     
+    stringify(value: T): string {
+        return this.tokenType.stringify(value)
+    }
+
     token(lexeme: string, position: streams.StreamPosition): tokens.Token<T> {
         return new tokens.Token(this, lexeme, position)
     }
@@ -225,4 +229,8 @@ class TokenTypeWrapper<T> implements tokens.TokenType<T> {
         return new TokenTypeWrapper(this.tokenType.parsedAs(parser), this.array, this.index)
     }
     
+    serializedAs(serializer: (value: T) => string): tokens.TokenType<T> {
+        return new TokenTypeWrapper(this.tokenType.serializedAs(serializer), this.array, this.index)
+    }
+
 }
