@@ -6,13 +6,16 @@ name: ci-build
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ master, next ]
     paths:
       - 'src/**'
       - 'scripts/**'
+      - 'index.js'
+      - 'index.d.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      - 'tsconfig.prepare.json'
 
 jobs:
   build:
@@ -21,7 +24,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [16.x]
+        node-version: [20.x]
 
     steps:
     - name: Checkout source code
@@ -35,22 +38,4 @@ jobs:
     - name: Install, build and test
       run: |
           npm ci
-          npm run build --if-present
           npm test
-
-    - name: Prepare for Releasing to 'dist'
-      run: |
-        cp -R docs ./out
-        cp README.md ./out
-        cp scripts/release.sh ./out
-
-    - uses: actions/checkout@v2
-      with:
-        ref: dist
-        clean: false
-
-    - name: Push the transpiling-output code to dist branch
-      run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          bash ./out/release.sh
