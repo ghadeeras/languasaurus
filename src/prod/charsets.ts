@@ -2,13 +2,13 @@ import { SymbolSet } from "./sets.js"
 import * as utils from "./utils.js"
 
 export type Range = {
-    min: number;
-    max: number;
+    readonly min: number;
+    readonly max: number;
 }
 
 export const alphabet: Range = {
-    min: 0x0000,
-    max: 0xFFFF
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER
 }
 
 export interface CharSet extends SymbolSet<number> {
@@ -19,6 +19,14 @@ export interface CharSet extends SymbolSet<number> {
 
     toString(): string;
 
+}
+
+export function range(min: number, max: number): CharSet {
+    return CharRange.of(min, max);
+}
+
+export function ranges(...ranges: Range[]): CharSet {
+    return union(...ranges.map(r => range(r.min, r.max)));
 }
 
 export function char(c: number): CharSet {
@@ -33,16 +41,8 @@ export function chars(cs: string): CharSet {
     return union(...sets);
 }
 
-export function except(c: number): CharSet {
-    return complement(char(c));
-}
-
-export function range(min: number, max: number): CharSet {
-    return CharRange.of(min, max);
-}
-
-export function ranges(...ranges: Range[]): CharSet {
-    return union(...ranges.map(r => range(r.min, r.max)));
+export function charsOtherThan(c: number | string): CharSet {
+    return complement(typeof c === "string" ? chars(c) : char(c));
 }
 
 export function intersection(...sets: CharSet[]): CharSet {
@@ -85,11 +85,9 @@ const numbersComparator = utils.arrayComparator(utils.numberComparator);
 
 export function computeOverlaps(...sets: CharSet[]): Overlap[] {
     const result: Overlap[] = [];
-    const limits: IndexedLimit[] = utils.flatMap(sets, (set, i) => 
-        limitsOfRanges(set.ranges).map(limit => 
-            utils.pair(i, limit)
-        )
-    ).sort(utils.comparing(l => l.value, compareLimits));
+    const limits: IndexedLimit[] = sets.flatMap((set, i) => 
+        limitsOfRanges(set.ranges).map(limit => utils.pair(i, limit))
+    ).sort(utils.comparing(pair => pair.value, compareLimits));
 
     let ids: number[] = [];
     let lastLimit: RangeLimit = {
@@ -113,7 +111,6 @@ export function computeOverlaps(...sets: CharSet[]): Overlap[] {
             ids.push(limit.key);
         }
     }
-
     const aggregatedResult = utils.group(result, overlap => overlap.key, overlap => overlap.value, numbersComparator);
     return aggregatedResult.map(set => utils.pair(set.key, union(...set.value)));
 }
@@ -154,8 +151,7 @@ class CharRange implements CharSet {
     }
 
     static of(min: number, max: number): CharRange {
-        const [mn, mx] = min <= max ? [min, max] : [max, min]
-        return new CharRange(mn, mx);
+        return min <= max ? new CharRange(min, max) : new CharRange(max, min);
     }
 
     static from(range: Range): CharRange {
@@ -169,12 +165,11 @@ class Union implements CharSet {
     public readonly size: number;
 
     private constructor(private readonly charRanges: CharRange[]) {
-        const sum = (a: number, b: number) => a + b;
-        this.size = charRanges.map(range => range.size).reduce(sum, 0);
+        this.size = charRanges.map(range => range.size).reduce(((a, b) => a + b), 0);
     }
 
     contains(char: number): boolean {
-        return !this.charRanges.every(range => !range.contains(char));
+        return this.charRanges.some(range => range.contains(char));
     }
 
     random(): number {
@@ -201,7 +196,7 @@ export const all = range(alphabet.min, alphabet.max);
 export const empty = union();
 
 function isInvalidChar(char: number): boolean {
-    return char < alphabet.min || char > alphabet.max || char != Math.round(char);
+    return char < alphabet.min || char > alphabet.max || char !== Math.round(char);
 }
 
 type RangeLimit = {
@@ -273,19 +268,11 @@ function complementLimit(limit: RangeLimit): RangeLimit {
 }
 
 function limitsOfSets(sets: CharSet[]) {
-    const limits: RangeLimit[] = [];
-    for (const set of sets) {
-        limits.push(...limitsOfRanges(set.ranges));
-    }
-    return limits;
+    return sets.flatMap(set => limitsOfRanges(set.ranges));
 }
 
 function limitsOfRanges(ranges: Range[]): RangeLimit[] {
-    const limits: RangeLimit[] = [];
-    for (const range of ranges) {
-        limits.push(...rangeLimits(range))
-    }
-    return limits;
+    return ranges.flatMap(range => rangeLimits(range));
 }
 
 function rangeLimits(range: Range): RangeLimit[] {

@@ -158,7 +158,7 @@ describe("utils", () => {
                 [6, 7, 8]
             ]
 
-            const result = utils.flatten(array);
+            const result = array.flat(1);
 
             expect(result).to.deep.equal([1, 2, 3, 4, 5, 6, 7, 8]);
         });

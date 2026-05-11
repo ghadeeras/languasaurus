@@ -96,16 +96,6 @@ export function comparingBy<A>(...comparators: Comparator<A>[]): Comparator<A> {
     }
 }
 
-export function flatten<T>(array: T[][]): T[] {
-    return flatMap(array, v => v);
-}
-
-export function flatMap<I, O>(array: I[], mapper: Mapper<I, O[]>): O[] {
-    const result: O[] = [];
-    array.map(mapper).forEach(os => os.forEach(o => result.push(o)));
-    return result;
-}
-
 export function unique<T>(values: T[]): T[] {
     const vs: T[] = []
     for (const v of values) {

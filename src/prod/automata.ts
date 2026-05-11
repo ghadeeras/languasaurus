@@ -57,11 +57,11 @@ export class Automaton<R> {
     }
 
     get transientStates() {
-        return [...this._states]
+        return [...this._transientStates]
     }
 
     get finalStates() {
-        return [...this._states]
+        return [...this._finalStates]
     }
 
     newMatcher(): Matcher<R> {
@@ -237,7 +237,7 @@ export class Automaton<R> {
     }
 
     private static unionState<R>(states: State<R>[]): State<R> {
-        return State.create(...utils.flatMap(states, state => state.recognizables))
+        return State.create(...states.flatMap(state => state.recognizables))
     }
 
 }
@@ -351,7 +351,7 @@ export class State<R> {
         return this.on(charsets.complement(charsets.chars(chars)), target)
     }
 
-    onCharOutOf(range: string, target: State<R>): State<R> {
+    onCharNotIn(range: string, target: State<R>): State<R> {
         return this.on(charsets.complement(charsets.range(
             range.charCodeAt(0), 
             range.charCodeAt(range.length - 1)
@@ -405,7 +405,7 @@ class Transition<R> {
 class ClosureState<R> extends State<R> {
 
     protected constructor(readonly automaton: Automaton<R>, readonly stateIndexes: number[]) {
-        super(utils.unique(utils.flatMap(stateIndexes, index => automaton.states[index].recognizables)))
+        super(utils.unique(stateIndexes.flatMap(index => automaton.states[index].recognizables)))
     }
 
     static startStateOf<R>(automaton: Automaton<R>) {
@@ -433,7 +433,7 @@ class ClosureState<R> extends State<R> {
     
 
     private static nonOverlappingTransitions<R>(states: State<R>[]) {
-        const transitions = utils.flatMap(states, state => state.transitions)
+        const transitions = states.flatMap(state => state.transitions)
         const tempState: State<R> = State.create()
         for (const transition of transitions) {
             tempState.on(transition.trigger, transition.target, false)

@@ -28,8 +28,8 @@ describe("Charset", () => {
         })
     });
 
-    describe("except", () => {
-        const c = charset.except(123);
+    describe("charsOtherThan(number)", () => {
+        const c = charset.charsOtherThan(123);
 
         it("has all characters except one", () => {
             expect(c.size).to.equal(charset.all.size - 1);
