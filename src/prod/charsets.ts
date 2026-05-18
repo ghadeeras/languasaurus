@@ -13,9 +13,9 @@ export const alphabet: Range = {
 
 export interface CharSet extends SymbolSet<number> {
 
-    ranges: Range[];
+    readonly ranges: Range[];
 
-    size: number;
+    readonly size: number;
 
     toString(): string;
 

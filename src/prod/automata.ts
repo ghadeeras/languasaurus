@@ -1,14 +1,11 @@
 import * as charsets from './charsets.js'
 import * as utils from './utils.js'
 
-type StateMapper<R1, R2> = utils.Mapper<State<R1>, State<R2>>
-type StateCloner<R> = StateMapper<R, R>
-
 export interface Matcher<R> {
 
-    lastRecognized: R[]
+    readonly lastRecognized: R[]
 
-    recognized: R[]
+    readonly recognized: R[]
 
     match(char: number): boolean
 
@@ -27,11 +24,11 @@ export function automaton<R>(start: State<R>): Automaton<R> {
 }
 
 export function choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
-    return Automaton.choice(automaton, ...automata)
+    return automaton.or(...automata)
 }
 
 export function concat<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
-    return Automaton.concat(automaton, ...automata)
+    return automaton.then(...automata)
 }
 
 export class Automaton<R> {
@@ -39,13 +36,13 @@ export class Automaton<R> {
     private _states: State<R>[]
     private _transientStates: State<R>[]
     private _finalStates: State<R>[]
-    readonly startState: State<R>
+    private _startState: State<R>
 
     private constructor(states: State<R>[]) {
         this._states = utils.unique(states)
         this._transientStates = this._states.filter(state => state.isTransient)
         this._finalStates = this._states.filter(state => state.isFinal)
-        this.startState = this._states[0]
+        this._startState = this._states[0]
     }
 
     get isOptional(): boolean {
@@ -64,6 +61,10 @@ export class Automaton<R> {
         return [...this._finalStates]
     }
 
+    get startState() {
+        return this._startState
+    }
+
     newMatcher(): Matcher<R> {
         return new AutomatonMatcher(this.startState)
     }
@@ -72,8 +73,8 @@ export class Automaton<R> {
         let result = ""
         for (let i = 0; i < this._states.length; i++) {
             const state = this._states[i]
-            const finalTag = state.isFinal ? '(final)' : ''
-            result += `state #${i} ${finalTag}:\n`
+            const finalTag = state.isFinal ? ' (final)' : ''
+            result += `state #${i}${finalTag}:\n`
             for (const transition of state.transitions) {
                 result += `\t on ${transition.trigger} --> state #${this._states.indexOf(transition.target)} \n`
             }
@@ -81,10 +82,28 @@ export class Automaton<R> {
         return result 
     }
 
-    deterministic(): Automaton<R> {
-        const ndf = this.cloneNoDuplicates()
-        const df = Automaton.create(ClosureState.startStateOf(ndf))
-        return df.cloneNoDuplicates()
+    clone(): Automaton<R> {
+        return this.mapStates(s => Automaton.state(s))
+    }
+
+    map<RR>(mapper: utils.Mapper<R, RR>): Automaton<RR> {
+        return this.mapStates(state => State.create(...state.recognizables.map(mapper)))
+    }
+
+    mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
+        const map = new Map<State<R>, State<RR>>()
+        const mappedStates = this._states.map((state, index) => {
+            let mappedState = stateMapper(state, index)
+            map.set(state, mappedState)
+            return mappedState
+        })
+        for (const [state, mappedState] of map.entries()) {
+            for (const transition of state.transitions) {
+                const mappedTarget = map.get(transition.target) ?? utils.bug()
+                mappedState.on(transition.trigger, mappedTarget)
+            }
+        }
+        return new Automaton(mappedStates)
     }
 
     optional(): Automaton<R> {
@@ -100,43 +119,18 @@ export class Automaton<R> {
     }
 
     repeated(): Automaton<R> {
-        const draft = this.clone()
-        for (const finalState of draft._finalStates) {
-            for (const transition of draft.startState.transitions) {
+        const clone = this.clone()
+        for (const finalState of clone._finalStates) {
+            for (const transition of clone.startState.transitions) {
                 finalState.on(transition.trigger, transition.target)
             }
         }
-        return Automaton.create(draft.startState)
+        return Automaton.create(clone.startState)
     }
 
-    clone(stateCloner: StateCloner<R> = s => Automaton.state(s)): Automaton<R> {
-        return this.mapStates(stateCloner)
-    }
-
-    map<RR>(mapper: utils.Mapper<R, RR>): Automaton<RR> {
-        return this.mapStates(state => State.create(...state.recognizables.map(mapper)))
-    }
-
-    mapStates<RR>(stateMapper: StateMapper<R, RR>): Automaton<RR> {
-        const map: Map<State<R>, number> = new Map()
-        const mappedStates: State<RR>[] = this._states.map((state, index) => {
-            map.set(state, index)
-            return stateMapper(state, index)
-        })
-        for (let i = 0; i < this._states.length; i++) {
-            const state = this._states[i]
-            const clone = mappedStates[i]
-            for (const transition of state.transitions) {
-                const index: number = map.get(transition.target) ?? utils.bug()
-                clone.on(transition.trigger, mappedStates[index])
-            }
-        }
-        return new Automaton(mappedStates)
-    }
-
-    static choice<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
-        automata.unshift(automaton)
-        const startState: State<R> = Automaton.unionState(automata.map(a => a.startState))
+    or(...automata: Automaton<R>[]): Automaton<R> {
+        automata.unshift(this)
+        const startState = Automaton.unionState(automata.map(a => a.startState))
         for (const automaton of automata) {
             const clone = automaton.clone()
             for (const transition of clone.startState.transitions) {
@@ -146,13 +140,15 @@ export class Automaton<R> {
         return Automaton.create(startState)
     }
 
-    static concat<R>(automaton: Automaton<R>, ...automata: Automaton<R>[]): Automaton<R> {
-        automata.unshift(automaton)
-        const lastNonOptional = automata.reduce((max, automaton, index) => !automaton.isOptional && index > max ? index : max, -1)
-        const startState: State<R> = lastNonOptional <= -1 ? Automaton.state(automaton.startState) : State.create()
+    then(...automata: Automaton<R>[]): Automaton<R> {
+        automata.unshift(this)
+        const lastNonOptionalIndex = automata.reduce((max, automaton, index) => !automaton.isOptional && index > max ? index : max, -1)
+        const startState = lastNonOptionalIndex <= -1 
+            ? Automaton.state(this.startState) // entire concatenation is optional, so we should copy the start recognizing state
+            : State.create<R>()
         let jointStates: State<R>[] = [startState]
         for (let i = 0; i < automata.length; i++) {
-            jointStates = Automaton.append(automata[i], jointStates, i >= lastNonOptional)
+            jointStates = Automaton.append(automata[i], jointStates, i >= lastNonOptionalIndex)
         }
         return Automaton.create(startState)
     }
@@ -161,16 +157,17 @@ export class Automaton<R> {
         return new Automaton(this.allStatesFrom(start))
     } 
 
-    private static append<R>(automaton: Automaton<R>, prevStates: State<R>[], optional: boolean) {
-        const nextStates: State<R>[] = automaton.isOptional ? [...prevStates] : []
-        const cloner: StateCloner<R> = state => {
-            const clone: State<R> = optional ? Automaton.state(state) : State.create()
+    private static append<R>(automaton: Automaton<R>, prevStates: State<R>[], recognizesConcatenation: boolean) {
+        const nextStates = automaton.isOptional ? [...prevStates] : []
+        const clonedAutomaton = automaton.mapStates(state => {
+            const clone = recognizesConcatenation 
+                ? Automaton.state(state) // if the automaton recognizes the concatenation, we should copy the recognizing states.
+                : State.create<R>() // otherwise, recognizing states should be replaced with transient ones.
             if (state.isFinal) {
                 nextStates.push(clone)
             }
             return clone
-        }
-        const clonedAutomaton = automaton.clone(cloner)
+        })
         for (const prevState of prevStates) {
             for (const transition of clonedAutomaton.startState.transitions) {
                 prevState.on(transition.trigger, transition.target)
@@ -199,17 +196,21 @@ export class Automaton<R> {
         }
     }
 
-    private cloneNoDuplicates(): Automaton<R> {
-        let oldSize = this._states.length
-        this.reorganizeTriggerOverlaps()
-        let automaton = this.cloneNoShallowDuplicates()
+    deterministic(): Automaton<R> {
+        const converter = new NDFAToDFAConverter(this.minimal())
+        return converter.convert().minimal()
+    }
+
+    private minimal(): Automaton<R> {
+        let automaton: Automaton<R> = this
         let newSize = automaton._states.length
-        while (newSize < oldSize) {
+        let oldSize = 0
+        do {
             oldSize = newSize
             automaton.reorganizeTriggerOverlaps()
-            automaton = automaton.cloneNoShallowDuplicates()
+            automaton = automaton.shallowMinimal()
             newSize = automaton._states.length
-        }
+        } while (newSize < oldSize)
         return automaton
     }
 
@@ -217,7 +218,7 @@ export class Automaton<R> {
         this._states.forEach(s => s.reorganizeTriggerOverlaps())
     }
 
-    private cloneNoShallowDuplicates() {
+    private shallowMinimal() {
         const visitedStates: State<R>[] = []
         const clonedStates: State<R>[] = []
         const cloner: StateCloner<R> = state => {
@@ -229,7 +230,7 @@ export class Automaton<R> {
              }
              return clonedStates[index]
         }
-        return this.clone(cloner)
+        return this.mapStates(cloner)
     }    
 
     private static state<R>(state: State<R>): State<R> {
@@ -241,6 +242,9 @@ export class Automaton<R> {
     }
 
 }
+
+type StateMapper<R1, R2> = utils.Mapper<State<R1>, State<R2>>
+type StateCloner<R> = StateMapper<R, R>
 
 class AutomatonMatcher<R> implements Matcher<R> {
 
@@ -358,8 +362,8 @@ export class State<R> {
         )), target)
     }
 
-    on(trigger: charsets.CharSet, target: State<R>, optimized = true): State<R> {
-        const index = optimized ? this._transitions.findIndex(t => t.target == target) : -1
+    on(trigger: charsets.CharSet, target: State<R>, allowTransitionMerging = true): State<R> {
+        const index = allowTransitionMerging ? this._transitions.findIndex(t => t.target == target) : -1
         if (index < 0) {
             this._transitions.push(new Transition(trigger, target))
         } else {
@@ -402,31 +406,32 @@ class Transition<R> {
 
 }
 
-class ClosureState<R> extends State<R> {
+class NDFAToDFAConverter<R> {
 
-    protected constructor(readonly automaton: Automaton<R>, readonly stateIndexes: number[]) {
-        super(utils.unique(stateIndexes.flatMap(index => automaton.states[index].recognizables)))
+    private closures: ClosureState<R>[] = []    
+    private comparator: utils.Comparator<ClosureState<R>> = utils.comparing(state => state.stateIndexes, utils.arrayComparator(utils.numberComparator))
+
+    constructor(private automaton: Automaton<R>) {
     }
 
-    static startStateOf<R>(automaton: Automaton<R>) {
-        return ClosureState.enclose(automaton, [0], [])
+    convert(): Automaton<R> {
+        return Automaton.create(this.enclose([0]))
     }
 
-    private static enclose<R>(automaton: Automaton<R>, stateIndexes: number[], closures: ClosureState<R>[]) {
-        const closure = new ClosureState(automaton, utils.unique(stateIndexes).sort());
-        const comparator: utils.Comparator<ClosureState<R>> = utils.comparing(state => state.stateIndexes, utils.arrayComparator(utils.numberComparator))
-        const identicalClosure = closures.find(c => comparator(c, closure) == 0)
-        return identicalClosure || ClosureState.init<R>(closure, automaton, closures) 
+    private enclose(stateIndexes: number[]) {
+        const closure = new ClosureState(this.automaton, stateIndexes);
+        const identicalClosure = this.closures.find(c => this.comparator(c, closure) == 0)
+        return identicalClosure || this.init(closure) 
     }
 
-    private static init<R>(closure: ClosureState<R>, automaton: Automaton<R>, closures: ClosureState<R>[]) {
-        closures.push(closure)
-        const states = closure.stateIndexes.map(index => automaton.states[index])
-        const transitions = ClosureState.nonOverlappingTransitions<R>(states)
+    private init(closure: ClosureState<R>) {
+        this.closures.push(closure)
+        const states = closure.stateIndexes.map(index => this.automaton.states[index])
+        const transitions = NDFAToDFAConverter.nonOverlappingTransitions<R>(states)
         const groupedTransitions = utils.group(transitions, t => t.trigger, t => t.target, charSetComparator)
         for (const transition of groupedTransitions) {
-            const targetIndexes = transition.value.map(target => automaton.states.indexOf(target))
-            closure.on(transition.key, ClosureState.enclose(automaton, targetIndexes, closures))
+            const targetIndexes = transition.value.map(target => this.automaton.states.indexOf(target))
+            closure.on(transition.key, this.enclose(targetIndexes))
         }
         return closure
     }
@@ -440,6 +445,17 @@ class ClosureState<R> extends State<R> {
         }
         tempState.reorganizeTriggerOverlaps()
         return tempState.transitions
+    }
+
+}
+
+class ClosureState<R> extends State<R> {
+
+    readonly stateIndexes: number[]
+
+    constructor(readonly automaton: Automaton<R>, stateIndexes: number[]) {
+        super(utils.unique(stateIndexes.flatMap(index => automaton.states[index].recognizables)))
+        this.stateIndexes = utils.unique(stateIndexes).sort()
     }
 
 }

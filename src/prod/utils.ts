@@ -115,7 +115,7 @@ export function randomInt(max: number): number {
     return Math.floor(Math.random() * Math.floor(max));
 }
 
-export function bug<T>(): T {
+export function bug<T>(): Exclude<T, undefined | null> {
     throw new Error("Should never happen!!!")
 }
 

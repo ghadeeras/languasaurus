@@ -71,12 +71,12 @@ function charRanges(complement: boolean, rs: string[]) {
 
 export function concat(regex: RegEx, ...regexes: RegEx[]) {
     const allAutomata = regexes.map(regex => regex.automaton)
-    return RegEx.create(automata.Automaton.concat(regex.automaton, ...allAutomata))
+    return RegEx.create(regex.automaton.then(...allAutomata))
 }
 
 export function choice(regex: RegEx, ...regexes: RegEx[]) {
     const allAutomata = regexes.map(regex => regex.automaton)
-    return RegEx.create(automata.Automaton.choice(regex.automaton, ...allAutomata))
+    return RegEx.create(regex.automaton.or(...allAutomata))
 }
 
 export function oneOrMore(regex: RegEx) {

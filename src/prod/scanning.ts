@@ -21,7 +21,7 @@ export class Scanner {
     private get automaton() {
         if (this._automaton == null) {
             const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
-            const a = automaton.Automaton.choice(automata[0], ...automata.splice(1)).deterministic()
+            const a = automata[0].or(...automata.splice(1)).deterministic()
             this._automaton = a.mapStates(s => s.recognizables.length > 0 ? 
                 automaton.state(this.tieBreak(s.recognizables)) : 
                 automaton.state()
