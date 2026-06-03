@@ -51,20 +51,36 @@ class TokenTypeImpl<T> implements TokenType<T> {
 
 }
 
-export function textualToken(pattern: regex.RegEx): TokenType<string> {
+export const error: TokenType<Error> = new TokenTypeImpl(regex.charNotIn("\u0000-\uffff"), s => new Error(s), s => s.message)
+
+export const eof: TokenType<null> = new TokenTypeImpl(regex.char("\u0000"), s => null, s => "")
+
+export function string(pattern: regex.RegEx): TokenType<string> {
     return new TokenTypeImpl(pattern, s => s, s => s)
 }
 
-export function floatToken(pattern: regex.RegEx): TokenType<number> {
+export function float(pattern: regex.RegEx): TokenType<number> {
     return new TokenTypeImpl(pattern, s => Number.parseFloat(s), n => n.toString())
 }
 
-export function integerToken(pattern: regex.RegEx): TokenType<number> {
+export function integer(pattern: regex.RegEx): TokenType<number> {
     return new TokenTypeImpl(pattern, s => Number.parseInt(s), n => n.toFixed(0))
 }
 
-export function booleanToken(pattern: regex.RegEx): TokenType<boolean> {
+export function boolean(pattern: regex.RegEx): TokenType<boolean> {
     return new TokenTypeImpl(pattern, s => s === "true", b => b ? "true" : "false")
+}
+
+export function keyword(word: string) {
+    return boolean(regex.word(word)).parsedAs(lexeme => true)
+}
+
+export function op(op: string) {
+    return boolean(regex.word(op)).parsedAs(lexeme => true)
+}
+
+export function delimiter(del: string) {
+    return boolean(regex.word(del)).parsedAs(lexeme => true)
 }
 
 export class Token<T> {

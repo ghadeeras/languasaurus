@@ -1,94 +1,52 @@
 import * as streams from './streams.js'
 import * as tokens from './tokens.js'
 import * as automaton from './automata.js'
-import * as regex from './regex.js'
 import * as utils from './utils.js'
 
-export class Scanner {
+export type TokenDefinitions = Record<string, tokens.TokenType<any>> & { EOF?: never, ERROR?: never }
 
-    readonly errorTokenType: tokens.TokenType<string> = tokens.textualToken(regex.oneOrMore(regex.charIn("\u0000-\uffff")))
-    readonly eofTokenType: tokens.TokenType<boolean> = tokens.booleanToken(regex.word("EOF")).parsedAs(lexeme => true)
+export class Scanner<D extends TokenDefinitions> {
 
-    private readonly tokenTypes: TokenTypeWrapper<any>[] = []
-    private readonly _tokenTypeNames: Map<tokens.TokenType<any>, string> = new Map()
-    
-    private _automaton: automaton.Automaton<tokens.TokenType<any>> | null = null
+    private readonly tokenTypes: tokens.TokenType<any>[] = []
+    private readonly tokenTypesMap: Map<tokens.TokenType<any>, keyof D | "ERROR" | "EOF"> = new Map()
+        .set(tokens.error, "ERROR")
+        .set(tokens.eof, "EOF")
+    private readonly automaton: automaton.Automaton<tokens.TokenType<any>>
+    private tokenDefinitions: D & { EOF: typeof tokens.eof, ERROR: typeof tokens.error }
 
-    private define<T>(tokenType: tokens.TokenType<T>): tokens.TokenType<T> {
-        return new TokenTypeWrapper(tokenType, this.tokenTypes)
-    }
-    
-    private get automaton() {
-        if (this._automaton == null) {
-            const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
-            const a = automata[0].or(...automata.splice(1)).deterministic()
-            this._automaton = a.mapStates(s => s.recognizables.length > 0 ? 
-                automaton.state(this.tieBreak(s.recognizables)) : 
-                automaton.state()
-            )
+    constructor(tokenDefinitions: D) {
+        this.tokenDefinitions = { ...tokenDefinitions, EOF: tokens.eof, ERROR: tokens.error }
+        for (const key in tokenDefinitions) {
+            const tokenType = tokenDefinitions[key]
+            this.tokenTypes.push(tokenType)
+            this.tokenTypesMap.set(tokenType, key)
         }
-        return this._automaton
+        const automata = this.tokenTypes.map(t => t.pattern.automaton.map(() => t))
+        const a = automata[0].or(...automata.splice(1)).deterministic()
+        this.automaton = a.mapStates(s => 
+              s.recognizables.length == 1 ? automaton.state(s.recognizables[0]) 
+            : s.recognizables.length > 1 ? automaton.state(this.tieBreak(s.recognizables)) 
+            : automaton.state()
+        )
     }
 
     protected tieBreak(tokensTypes: tokens.TokenType<any>[]) {
-        if (tokensTypes.length == 1) {
-            return tokensTypes[0]
-        }
         const index = tokensTypes
-            .map(t => t instanceof TokenTypeWrapper ? t.index : utils.bug<number>())
+            .map(t => this.tokenTypes.indexOf(t))
             .reduce((i1, i2) => i1 < i2 ? i1 : i2)
         return this.tokenTypes[index]
     }
 
-    get tokenTypeNames() {
-        this.initTokenNames()
-        return [...this._tokenTypeNames.values()]
+    get tokenTypeNames(): (keyof D | "ERROR" | "EOF")[] {
+        return [...this.tokenTypesMap.values()]
     }
 
-    tokenTypeName<T>(tokenType: tokens.TokenType<T>) {
-        this.initTokenNames()
-        return this._tokenTypeNames.get(tokenType)
+    token(name: keyof D | "ERROR" | "EOF"): tokens.TokenType<any> {
+        return this.tokenDefinitions[name]
     }
 
-    private initTokenNames() {
-        if (this._tokenTypeNames.size == 0) {
-            this._tokenTypeNames.set(this.errorTokenType, "ERROR")
-            this._tokenTypeNames.set(this.eofTokenType, "EOF")
-            for (const key in this) {
-                const value = this[key]
-                if (value instanceof TokenTypeWrapper) {
-                    this._tokenTypeNames.set(value, key)
-                }
-            }
-        }
-    }
-
-    protected string(pattern: regex.RegEx) {
-        return this.define(tokens.textualToken(pattern))
-    }
-
-    protected float(pattern: regex.RegEx) {
-        return this.define(tokens.floatToken(pattern))
-    }
-
-    protected integer(pattern: regex.RegEx) {
-        return this.define(tokens.integerToken(pattern))
-    }
-
-    protected boolean(pattern: regex.RegEx) {
-        return this.define(tokens.booleanToken(pattern))
-    }
-
-    protected keyword(word: string) {
-        return this.boolean(regex.word(word)).parsedAs(lexeme => true)
-    }
-
-    protected op(op: string) {
-        return this.boolean(regex.word(op)).parsedAs(lexeme => true)
-    }
-
-    protected delimiter(del: string) {
-        return this.boolean(regex.word(del)).parsedAs(lexeme => true)
+    tokenTypeName<T>(tokenType: tokens.TokenType<T>): keyof D | "ERROR" | "EOF" {
+        return this.tokenTypesMap.get(tokenType) ?? utils.bug()
     }
 
     *iterator(stream: streams.InputStream<number>) {
@@ -96,14 +54,14 @@ export class Scanner {
         while (stream.hasMoreSymbols()) {
             yield this.next(stream, matcher)
         }
-        yield this.eofTokenType.token("EOF", stream.position())
+        yield tokens.eof.token("\u0000", stream.position())
     }
     
     nextToken(stream: streams.InputStream<number>) {
         const matcher = new ScanningMatcher(this.automaton.newMatcher())
         return stream.hasMoreSymbols() ? 
             this.next(stream, matcher) : 
-            this.eofTokenType.token("EOF", stream.position())
+            tokens.eof.token("\u0000", stream.position())
     }
     
     randomToken(shortness = 0.1) {
@@ -126,7 +84,7 @@ export class Scanner {
         const [recognizables, lexeme] = matcher.nextToken(stream)
         return recognizables.length > 0 ?
             recognizables[0].token(lexeme, position) :
-            this.errorTokenType.token(lexeme, position)
+            tokens.error.token(lexeme, position)
     }
 
 }
@@ -193,44 +151,6 @@ class ScanningMatcher {
         this.consumedChars = ""
         stream.unmark()
         stream.mark()
-    }
-
-}
-
-class TokenTypeWrapper<T> implements tokens.TokenType<T> {
-
-    constructor(private tokenType: tokens.TokenType<T>, private array: tokens.TokenType<T>[], readonly index: number = array.length) {
-        if (0 <= index && index < array.length) {
-            array[index] = this
-        } else if (index == array.length) {
-            array.push(this)
-        } else {
-            utils.bug()
-        }
-    }
-
-    get pattern(): regex.RegEx {
-        return this.tokenType.pattern
-    }
-    
-    parse(lexeme: string): T {
-        return this.tokenType.parse(lexeme)
-    }
-    
-    stringify(value: T): string {
-        return this.tokenType.stringify(value)
-    }
-
-    token(lexeme: string, position: streams.StreamPosition): tokens.Token<T> {
-        return new tokens.Token(this, lexeme, position)
-    }
-
-    parsedAs(parser: (lexeme: string) => T): tokens.TokenType<T> {
-        return new TokenTypeWrapper(this.tokenType.parsedAs(parser), this.array, this.index)
-    }
-    
-    serializedAs(serializer: (value: T) => string): tokens.TokenType<T> {
-        return new TokenTypeWrapper(this.tokenType.serializedAs(serializer), this.array, this.index)
     }
 
 }

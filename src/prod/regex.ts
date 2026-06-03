@@ -2,6 +2,14 @@ import * as automata from './automata.js'
 import * as sets from './sets.js'
 import * as charsets from './charsets.js'
 
+export type Char<C> = C extends `${infer _}${infer T}`
+  ? T extends '' ? C : never
+  : never;
+
+export type CharRange<C> = C extends `${infer _F}${"-" | ".." | "..."}${infer _T}${infer E}`
+  ? E extends '' ? C : never
+  : never;
+
 export type State = automata.State<true>
 export type Automaton = automata.Automaton<true>
 
@@ -17,48 +25,44 @@ export function from(state: State) {
     return RegEx.create(automata.Automaton.create(state))
 }
 
-export function word(w: string) {
-    return chars(w)
+export function word(w: string): RegEx {
+    return charSeq(w)
 }
 
-export function chars(cs: string) {
-    const regexes: RegEx[] = []
-    for (let i = 0; i < cs.length; i++) {
-        const c = cs.charAt(i)
-        regexes.push(charIn(c))
-    }
+export function charSeq(cs: string): RegEx {
+    const regexes = [...cs].map(c => charFrom(c))
     return concat(regexes[0], ...regexes.slice(1))
 }
 
-export function char(c: string) {
+export function char<C>(c: Char<C>): RegEx {
     return charFrom(c)
 }
 
-export function charOtherThan(c: string) {
+export function charOtherThan<C>(c: Char<C>): RegEx {
     return charNotFrom(c)
 }
 
-export function charFrom(chars: string) {
-    const [range, ...ranges] = splitChars(chars) 
-    return charIn(range, ...ranges)
-}
-
-export function charNotFrom(chars: string) {
-    const [range, ...ranges] = splitChars(chars) 
-    return charOutOf(range, ...ranges)
-}
-
-export function charIn(range: string, ...ranges: string[]) {
+export function charFrom(chars: string): RegEx {
+    const [range, ...ranges] = chars 
     return charRanges(false, [range, ...ranges])
 }
 
-export function charOutOf(range: string, ...ranges: string[]) {
+export function charNotFrom(chars: string): RegEx {
+    const [range, ...ranges] = chars 
+    return charRanges(true, [range, ...ranges])
+}
+
+export function charIn<C>(range: CharRange<C>, ...ranges: CharRange<C>[]): RegEx {
+    return charRanges(false, [range, ...ranges])
+}
+
+export function charNotIn<C>(range: CharRange<C>, ...ranges: CharRange<C>[]): RegEx {
     return charRanges(true, [range, ...ranges])
 }
 
 function charRanges(complement: boolean, rs: string[]) {
-    const start = newState()
-    const end = newEndState()
+    const start = state()
+    const end = endState()
     const trigger = charsets.union(...rs.map(r => 
         charsets.range(
             r.charCodeAt(0), 
@@ -189,20 +193,4 @@ export class RegEx implements sets.SymbolSet<string> {
         return new RegEx(automaton.deterministic())
     }
 
-}
-
-function newState(): State {
-    return automata.State.create()
-}
-
-function newEndState(): State {
-    return automata.State.create(true)
-}
-
-function splitChars(chars: string) {
-    const ranges: string[] = []
-    for (let i = 0; i < chars.length; i++) {
-        ranges.push(chars.charAt(i))
-    }
-    return ranges
 }

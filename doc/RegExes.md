@@ -12,14 +12,14 @@ Regular expressions represent the basic building blocks of scanners/parsers. The
 To follow are some basic examples on how to define regular expressions:
 
 ```typescript
-import * as L from 'https://ghadeeras.github.io/languasaurus/js/index.js'
+import * as L from 'languasaurus'
 
 const a = L.char('a')
 const notA = L.charOtherThan('a')
 const musicNote = L.charFrom('abcdefg')
 const alsoMusicNote = L.charIn('a-g')
 const notMusicNote = L.charNotFrom('abcdefg')
-const alsoNotMusicNote = L.charOutOf('a-g')
+const alsoNotMusicNote = L.charNotIn('a-g')
 const vibrato = L.word('vibrato') // a sequence of characters v, i, b, r, a, t, and o
 ```
 
@@ -69,30 +69,30 @@ const cStyleComment = L.from(start)
 To follow are examples on how to check that a string matches a pattern, or find a match in a string:
 
 ```typescript
-import * as L from 'https://ghadeeras.github.io/languasaurus/js/index.js'
+import * as L from 'languasaurus'
 
-const camelCase = L.charIn('A-Z')
+const pascalCase = L.charIn('A-Z')
     .then(L.charIn('a-z').repeated())
     .repeated()
 
 /* Truth functions */
-console.log(camelCase.matches("CamelCase")) // prints true
-console.log(camelCase.matches("snake_case")) // prints false
+console.log(pascalCase.matches("PascalCase")) // prints true
+console.log(pascalCase.matches("snake_case")) // prints false
 
 /* Functions returning indexes of characters just after a match is recognized. */
-console.log(camelCase.shortestMatch("CamelCase")) // prints 2
-console.log(camelCase.longestMatch("CamelCase")) // prints 9
-console.log(camelCase.longestMatch("snake_case or CamelCase")) // prints null
-console.log(camelCase.longestMatch("snake_case or CamelCase", 14)) // prints 23 (i.e. 14 + 9)
-for (let index of camelCase.matchIndexes("CamelCase")) {
+console.log(pascalCase.shortestMatch("PascalCase")) // prints 2
+console.log(pascalCase.longestMatch("PascalCase")) // prints 9
+console.log(pascalCase.longestMatch("snake_case or PascalCase")) // prints null
+console.log(pascalCase.longestMatch("snake_case or PascalCase", 14)) // prints 23 (i.e. 14 + 9)
+for (let index of pascalCase.matchIndexes("PascalCase")) {
     console.log(index) // prints 2, 3, 4, 5, 7, 8, 9
 }
 
 /* Functions returning ranges that point to a match in a string. */
-console.log(camelCase.find("this is AnExample of camel case")) // prints [ 8, 17 ]
+console.log(pascalCase.find("this is AnExample of pascal case")) // prints [ 8, 17 ]
 ```
 You could also use a regular expression to generate random strings that match the pattern represented by the RegEx:
 
 ```typescript
-console.log(camelCase.random())
+console.log(pascalCase.random())
 ```

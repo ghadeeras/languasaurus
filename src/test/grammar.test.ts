@@ -3,17 +3,17 @@ import * as tokens from "../prod/tokens.js";
 import * as gram from "../prod/grammar.js";
 import { expect } from 'chai'
 
-const booleanLit = gram.terminal(tokens.booleanToken(rex.choice(
+const booleanLit = gram.terminal(tokens.boolean(rex.choice(
     rex.word("true"), 
     rex.word("false")
 )))
-const intLit = gram.terminal(tokens.integerToken(rex.oneOrMore(rex.charIn("0-9"))))
-const floatLit = gram.terminal(tokens.floatToken(rex.concat(
+const intLit = gram.terminal(tokens.integer(rex.oneOrMore(rex.charIn("0-9"))))
+const floatLit = gram.terminal(tokens.float(rex.concat(
     rex.zeroOrMore(rex.charIn("0-9")), 
     rex.char("."), 
     rex.oneOrMore(rex.charIn("0-9"))
 )))
-const identifier = gram.terminal(tokens.textualToken(rex.oneOrMore(rex.concat(
+const identifier = gram.terminal(tokens.string(rex.oneOrMore(rex.concat(
     rex.choice(
         rex.charIn("A-Z")
     ),
@@ -21,10 +21,10 @@ const identifier = gram.terminal(tokens.textualToken(rex.oneOrMore(rex.concat(
         rex.charIn("a-z")
     ))
 ))))
-const parenOpen = gram.terminal(tokens.textualToken(rex.word("(")))
-const parenClose = gram.terminal(tokens.textualToken(rex.word(")")))
-const opFactor = gram.terminal(tokens.textualToken(rex.charFrom("*/")))
-const opAdd = gram.terminal(tokens.textualToken(rex.charFrom("+-")))
+const parenOpen = gram.terminal(tokens.string(rex.word("(")))
+const parenClose = gram.terminal(tokens.string(rex.word(")")))
+const opFactor = gram.terminal(tokens.string(rex.charFrom("*/")))
+const opAdd = gram.terminal(tokens.string(rex.charFrom("+-")))
 
 describe("Grammar", () => {
 

@@ -1,54 +1,52 @@
-import * as scanner from '../prod/scanning.js'
 import * as streams from '../prod/streams.js'
 import * as tokens from '../prod/tokens.js'
 import * as regex from '../prod/regex.js'
+import { Scanner } from '../prod/scanning.js'
 import { expect } from 'chai'
 
-class MyScanner extends scanner.Scanner {
+const defs = {
+    shortKeyWord: tokens.keyword("fun"),
+    longKeyWord: tokens.keyword("function"),    
 
-    readonly shortKeyWord = this.keyword("fun")
-    readonly longKeyWord = this.keyword("function")    
+    opEq: tokens.op("="),
+    opSoEq: tokens.op("==="),
+    opNotEq: tokens.op("!="),
 
-    readonly opEq = this.op("=")
-    readonly opSoEq = this.op("===")
-    readonly opNotEq = this.op("!=")
-
-    readonly identifier = this.string(regex.concat(
+    identifier: tokens.string(regex.concat(
         regex.charIn("a-z", "A-Z"),
         regex.zeroOrMore(regex.charIn("a-z", "A-Z", "0-9"))
-    )).parsedAs(s => s.toUpperCase())
-    readonly intNum = this.integer(regex.oneOrMore(regex.charIn("0-9")))
-    readonly floatNum = this.float(regex.concat(
+    )).parsedAs(s => s.toUpperCase()),
+    intNum: tokens.integer(regex.oneOrMore(regex.charIn("0-9"))),
+    floatNum: tokens.float(regex.concat(
         regex.zeroOrMore(regex.charIn("0-9")),
         regex.charFrom(".").optional(),
         regex.oneOrMore(regex.charIn("0-9"))
-    ))
+    )),
 
-    readonly comment = this.string(regex.concat(
+    comment: tokens.string(regex.concat(
         regex.word("{"),
         regex.zeroOrMore(regex.charNotFrom("{}")),
         regex.word("}"),
-    ))
-    readonly ws = this.string(regex.oneOrMore(regex.charFrom(" \t\r\n")))
-    
+    )),
+    ws: tokens.string(regex.oneOrMore(regex.charFrom(" \t\r\n"))),
 }
+
+const myScanner = new Scanner(defs)
 
 describe("Scanner", () => {
 
-    const myScanner = new MyScanner()
-
     it("names the declared token types", () => {
         const s = myScanner
-        expect(s.tokenTypeName(s.shortKeyWord)).to.equal("shortKeyWord")
-        expect(s.tokenTypeName(s.longKeyWord)).to.equal("longKeyWord")
-        expect(s.tokenTypeName(s.opEq)).to.equal("opEq")
-        expect(s.tokenTypeName(s.opSoEq)).to.equal("opSoEq")
-        expect(s.tokenTypeName(s.opNotEq)).to.equal("opNotEq")
-        expect(s.tokenTypeName(s.identifier)).to.equal("identifier")
-        expect(s.tokenTypeName(s.intNum)).to.equal("intNum")
-        expect(s.tokenTypeName(s.floatNum)).to.equal("floatNum")
-        expect(s.tokenTypeName(s.comment)).to.equal("comment")
-        expect(s.tokenTypeName(s.ws)).to.equal("ws")
+        expect(s.tokenTypeName(defs.shortKeyWord)).to.equal("shortKeyWord")
+        expect(s.tokenTypeName(defs.longKeyWord)).to.equal("longKeyWord")
+        expect(s.tokenTypeName(defs.opEq)).to.equal("opEq")
+        expect(s.tokenTypeName(defs.opSoEq)).to.equal("opSoEq")
+        expect(s.tokenTypeName(defs.opNotEq)).to.equal("opNotEq")
+        expect(s.tokenTypeName(defs.identifier)).to.equal("identifier")
+        expect(s.tokenTypeName(defs.intNum)).to.equal("intNum")
+        expect(s.tokenTypeName(defs.floatNum)).to.equal("floatNum")
+        expect(s.tokenTypeName(defs.comment)).to.equal("comment")
+        expect(s.tokenTypeName(defs.ws)).to.equal("ws")
 
         expect(s.tokenTypeNames.sort()).to.deep.equal([
             "ERROR",
@@ -90,94 +88,94 @@ describe("Scanner", () => {
         const [eq] = tokenize("=")
         const [notEq] = tokenize("!=")
 
-        expect(eq.tokenType).to.equal(myScanner.opEq)
+        expect(eq.tokenType).to.equal(defs.opEq)
         expect(eq.lexeme).to.equal("=")
 
-        expect(notEq.tokenType).to.equal(myScanner.opNotEq)
+        expect(notEq.tokenType).to.equal(defs.opNotEq)
         expect(notEq.lexeme).to.equal("!=")    
     })
 
     it("matches longest token possible", () => {
         const [id, ws, float] = tokenize("funStuff\n\r123.456")
 
-        expect(id.tokenType).to.equal(myScanner.identifier)
+        expect(id.tokenType).to.equal(defs.identifier)
         expect(id.lexeme).to.equal("funStuff") 
 
-        expect(ws.tokenType).to.equal(myScanner.ws)
+        expect(ws.tokenType).to.equal(defs.ws)
         expect(ws.lexeme).to.equal("\n\r") 
 
-        expect(float.tokenType).to.equal(myScanner.floatNum)
+        expect(float.tokenType).to.equal(defs.floatNum)
         expect(float.value).to.equal(123.456) 
     })
 
     it("removes ambiguities by order of precedence", () => {
         const [int, fun] = tokenize("123456function")
-        expect(myScanner.floatNum.pattern.matches(int.lexeme)).to.be.true 
-        expect(myScanner.identifier.pattern.matches(fun.lexeme)).to.be.true 
+        expect(defs.floatNum.pattern.matches(int.lexeme)).to.be.true 
+        expect(defs.identifier.pattern.matches(fun.lexeme)).to.be.true 
 
-        expect(int.tokenType).to.equal(myScanner.intNum)
+        expect(int.tokenType).to.equal(defs.intNum)
         expect(int.value).to.equal(123456) 
-        expect(fun.tokenType).to.equal(myScanner.longKeyWord)
+        expect(fun.tokenType).to.equal(defs.longKeyWord)
         expect(fun.lexeme).to.equal("function") 
     })
 
     it("continues parsing just after last recognized token if dead end was reached while trying longest match", () => {
         const [eq1, eq2, notEq] = tokenize("==!=")
 
-        expect(eq1.tokenType).to.equal(myScanner.opEq)
-        expect(eq2.tokenType).to.equal(myScanner.opEq)
-        expect(notEq.tokenType).to.equal(myScanner.opNotEq)
+        expect(eq1.tokenType).to.equal(defs.opEq)
+        expect(eq2.tokenType).to.equal(defs.opEq)
+        expect(notEq.tokenType).to.equal(defs.opNotEq)
     })
 
     it("produces error token from unmatched tokens", () => {
         const [err] = tokenize("@#$%^&}")
 
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal("@#$%^&}")
     })
 
     it("produces error token from partially matched token and continues parsing from offending character", () => {
         const [err, comment] = tokenize("{ { }")
 
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal("{ ")
-        expect(comment.tokenType).to.equal(myScanner.comment)
+        expect(comment.tokenType).to.equal(defs.comment)
         expect(comment.lexeme).to.equal("{ }")
     })
 
     it("produces error token from mismatched characters and continues parsing from first matching character", () => {
         const [err, comment] = tokenize("@#$%^&{ <-- rubbish }")
 
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal("@#$%^&")
-        expect(comment.tokenType).to.equal(myScanner.comment)
+        expect(comment.tokenType).to.equal(defs.comment)
         expect(comment.lexeme).to.equal("{ <-- rubbish }")
     })
 
     it("produces error token from trailing mismatched characters", () => {
         const [comment, err] = tokenize("{ rubbish --> }@#$%^&")
 
-        expect(comment.tokenType).to.equal(myScanner.comment)
+        expect(comment.tokenType).to.equal(defs.comment)
         expect(comment.lexeme).to.equal("{ rubbish --> }")
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal("@#$%^&")
     })
 
     it("produces error token from mismatched characters and continues parsing from first matching (and recognizing) character", () => {
         const [err, comment] = tokenize(":hello")
 
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal(":")
-        expect(comment.tokenType).to.equal(myScanner.identifier)
+        expect(comment.tokenType).to.equal(defs.identifier)
         expect(comment.lexeme).to.equal("hello")
     })
 
     it("produces error token for incomplete tokens cut short by an EOF", () => {
         const [comment, err] = tokenize("{ incomplete --> }{ ...eof")
 
-        expect(comment.tokenType).to.equal(myScanner.comment)
+        expect(comment.tokenType).to.equal(defs.comment)
         expect(comment.lexeme).to.equal("{ incomplete --> }")
-        expect(err.tokenType).to.equal(myScanner.errorTokenType)
+        expect(err.tokenType).to.equal(tokens.error)
         expect(err.lexeme).to.equal("{ ...eof")
     })
 
@@ -187,7 +185,7 @@ describe("Scanner", () => {
         for (const token of myScanner.iterator(stream)) {
             result.push(token)
         }
-        expect(result.pop()?.tokenType).to.equal(myScanner.eofTokenType)
+        expect(result.pop()?.tokenType).to.equal(tokens.eof)
         return result
     }
     

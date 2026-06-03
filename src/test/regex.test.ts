@@ -80,10 +80,10 @@ describe("regex", () => {
 
     })
 
-    describe("charOutOf", () => {
+    describe("charNotIn", () => {
 
-        const r = regex.charOutOf("b..y")
-        const r1 = regex.charIn(String.fromCharCode(0) + "a", "z" + String.fromCharCode(0xFFFF))
+        const r = regex.charNotIn("b..y")
+        const r1 = regex.charIn("\u0000..a", "z..\uFFFF")
         const r2 = regex.charIn("b..y")
 
         it("recognizes strings of one character that is NOT in specified range", () => {

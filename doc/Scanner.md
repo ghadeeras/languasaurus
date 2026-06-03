@@ -2,13 +2,13 @@
 ![CI Build](https://github.com/ghadeeras/languasaurus/workflows/ci-build/badge.svg?branch=master)
 
 ## The Scanner / Lexical Analyzer
-The next level up in language construction is to build a scanner, or a lexical analyzer. This would take a stream of characters as input and spit out a stream of tokens or lexemes as output. Each type of tokens is associated with a regular expression that recognizes instances of the token type. The scanner basically tries to consume the longest string of characters that matches the regular expression of a token type, outputs it, then tries to consume the next token. If it encounters a string of characters it could not recognize, it produces an error token. Finally, if it reaches the end of the character stream, it outputs an EOF (end of file) token.
+The next level up in language construction is to build a scanner, or a lexical analyzer. This would take a stream of characters as input and spit out a stream of tokens or lexemes as output. Each type of token is associated with a regular expression that recognizes instances of the token type. The scanner basically tries to consume the longest string of characters that matches the regular expression of a token type, outputs it, then tries to consume the next token. If it encounters a string of characters it could not recognize, it produces an error token. Finally, if it reaches the end of the character stream, it outputs an EOF (end of file) token.
 
 ### Defining the Scanner
 To follow is an example of how to build or define a scanner:
 
 ```typescript
-import * as s from "https://ghadeeras.github.io/languasaurus/js/index.js"
+import * as s from "languasaurus"
 
 // Reusable regular expressions.
 const lowerCaseChar = s.charIn("a-z")
@@ -17,42 +17,40 @@ const alphaChar = s.choice(lowerCaseChar, upperCaseChar)
 const numericChar = s.charIn("0-9")
 const alphaNumericChar = s.choice(alphaChar, numericChar)
 
-class MyScanner extends s.Scanner {
+const defs = {
 
-    readonly whiteSpace = this.string(s.oneOrMore(s.charFrom(" \t\r\n")))
-    
-    readonly identifier = this.string(s.concat(
+    whiteSpace: s.string(s.oneOrMore(s.charFrom(" \t\r\n"))),
+
+    identifier: s.string(s.concat(
         alphaChar,
         s.zeroOrMore(alphaNumericChar)
-    ))
-    
-    readonly literalNumber = this.float(s.concat(
+    )),
+
+    literalNumber: s.float(s.concat(
         s.zeroOrMore(numericChar),
         s.char("."),
         s.oneOrMore(numericChar)
-    ))
+    )),
 
     // Operators
-    readonly opPlus = this.boolean(s.char("+"))
-    readonly opMinus = this.boolean(s.char("-"))
-    readonly opMul = this.boolean(s.char("*"))
-    readonly opDiv = this.boolean(s.char("/"))
-    readonly opPow = this.boolean(s.char("^"))
+    opPlus: s.op("+"),
+    opMinus: s.op("-"),
+    opMul: s.op("*"),
+    opDiv: s.op("/"),
+    opPow: s.op("^"),
 
     // Delimiters
-    readonly delOpenParen = this.boolean(s.char("("))
-    readonly delCloseParen = this.boolean(s.char(")"))
+    delOpenParen: s.delimeter("("),
+    delCloseParen: s.delimeter(")"),
 
 }
+const myScanner = new s.Scanner(defs)
 ```
-
-By extending the `Scanner` class, a few useful methods become available to you, suh as `this.string()`, `this.float()`, `this.boolean()`, and others. These method define token types, and we pass to them the regular expressions that recognize them.
 
 ### Using the Scanner
 Lets continue the example above and add the following code:
 
 ```typescript
-const myScanner = new MyScanner()
 const expression = "amplitude * sin(2.0 * pi * frequency * time + phase) + bias"
 const stream = new s.TextInputStream(expression)
 for (let token of myScanner.iterator(stream)) {
@@ -63,7 +61,7 @@ for (let token of myScanner.iterator(stream)) {
 }
 ```
 
-In the code above, we create a scanner, then use its `iterator()` method to iterate over the tokens in a stream of characters. For each token, we print the lexeme (the actual sub-string that matches a token type regular expression), the token type, and the position it was found at.
+In the code above, after creating a scanner, we use its `iterator()` method to iterate over the tokens in a stream of characters. For each token, we print the lexeme (the actual sub-string that matches a token type regular expression), the token type, and the position it was found at.
 
 The output would look like this:
 
@@ -96,5 +94,5 @@ Token ' ' of type 'whiteSpace' at [Line: 1, Column: 53]
 Token '+' of type 'opPlus' at [Line: 1, Column: 54]
 Token ' ' of type 'whiteSpace' at [Line: 1, Column: 55]
 Token 'bias' of type 'identifier' at [Line: 1, Column: 56]
-Token 'EOF' of type 'EOF' at [Line: 1, Column: 60]
+Token '' of type 'EOF' at [Line: 1, Column: 60]
 ```
