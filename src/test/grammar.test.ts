@@ -289,14 +289,20 @@ describe("Grammar", () => {
         })
 
         it("does not propagate from parent contexts for symbols followed by non optional symbols", () => {
-            const p = gram.production({ int: intLit, float: floatLit.oneOrMore(), id: identifier });
+            const p = gram
+                .productionOf("int", intLit)
+                .then("float", floatLit.oneOrMore())
+                .then("id", identifier);
             const g = wrap(p)
             expect(g.followSetOf(p.definition.float)).satisfies(aSetEqualTo(g.firstSetOf(p.definition.id)))
             expect(g.followSetOf(p.definition.int)).satisfies(aSetEqualTo(g.firstSetOf(p.definition.float)))
         })
 
         it("propagates to all productions in a choice", () => {
-            const c = gram.choice(intLit.as("int"), floatLit.as("float"), identifier.as("id"));
+            const c = gram
+                .choiceOf("int", intLit)
+                .or("float", floatLit)
+                .or("id", identifier);
             const g = wrap(c)
             expect(g.followSetOf(intLit)).satisfies(aSetEqualTo(g.followSetOf(c)))
             expect(g.followSetOf(floatLit)).satisfies(aSetEqualTo(g.followSetOf(c)))
