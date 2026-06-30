@@ -60,27 +60,27 @@ export function string(pattern: regex.RegEx): TokenType<string> {
 }
 
 export function float(pattern: regex.RegEx): TokenType<number> {
-    return new TokenTypeImpl(pattern, s => Number.parseFloat(s), n => n.toString())
+    return new TokenTypeImpl(pattern, s => Number.parseFloat(s), n => n.toPrecision())
 }
 
 export function integer(pattern: regex.RegEx): TokenType<number> {
     return new TokenTypeImpl(pattern, s => Number.parseInt(s), n => n.toFixed(0))
 }
 
-export function boolean(pattern: regex.RegEx): TokenType<boolean> {
-    return new TokenTypeImpl(pattern, s => s === "true", b => b ? "true" : "false")
+export function boolean(t: string= "true", f: string = "false"): TokenType<boolean> {
+    return new TokenTypeImpl(regex.word(t).or(regex.word(f)), s => s === t, b => b ? t : f)
 }
 
-export function keyword(word: string) {
-    return boolean(regex.word(word)).parsedAs(lexeme => true)
+export function keyword<T extends string>(word: T) {
+    return new TokenTypeImpl(regex.word(word), _ => word, _ => word)
 }
 
 export function op(op: string) {
-    return boolean(regex.word(op)).parsedAs(lexeme => true)
+    return keyword(op)
 }
 
 export function delimiter(del: string) {
-    return boolean(regex.word(del)).parsedAs(lexeme => true)
+    return keyword(del)
 }
 
 export class Token<T> {

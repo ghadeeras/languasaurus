@@ -3,28 +3,26 @@ import * as tokens from "../prod/tokens.js";
 import * as gram from "../prod/grammar.js";
 import { expect } from 'chai'
 
-const booleanLit = gram.terminal(tokens.boolean(rex.choice(
-    rex.word("true"), 
-    rex.word("false")
-)))
-const intLit = gram.terminal(tokens.integer(rex.oneOrMore(rex.charIn("0-9"))))
+const booleanLit = gram.terminal(tokens.boolean()).tokenless()
+const intLit = gram.terminal(tokens.integer(rex.oneOrMore(rex.charIn("0-9")))).tokenless()
 const floatLit = gram.terminal(tokens.float(rex.concat(
     rex.zeroOrMore(rex.charIn("0-9")), 
     rex.char("."), 
     rex.oneOrMore(rex.charIn("0-9"))
-)))
-const identifier = gram.terminal(tokens.string(rex.oneOrMore(rex.concat(
+))).tokenless()
+const idToken = gram.terminal(tokens.string(rex.oneOrMore(rex.concat(
     rex.choice(
         rex.charIn("A-Z")
     ),
     rex.oneOrMore(rex.choice(
         rex.charIn("a-z")
     ))
-))))
-const parenOpen = gram.terminal(tokens.string(rex.word("(")))
-const parenClose = gram.terminal(tokens.string(rex.word(")")))
-const opFactor = gram.terminal(tokens.string(rex.charFrom("*/")))
-const opAdd = gram.terminal(tokens.string(rex.charFrom("+-")))
+))));
+const identifier = idToken.tokenless()
+const parenOpen = gram.terminal(tokens.string(rex.word("("))).tokenless()
+const parenClose = gram.terminal(tokens.string(rex.word(")"))).tokenless()
+const opFactor = gram.terminal(tokens.string(rex.charFrom("*/"))).tokenless()
+const opAdd = gram.terminal(tokens.string(rex.charFrom("+-"))).tokenless()
 
 describe("Grammar", () => {
 
@@ -66,7 +64,7 @@ describe("Grammar", () => {
         it("collects symbols wrapped in choices", () => {
             const varExp = gram.production({id: identifier});
             const numExp = gram.production({val: intLit});
-            const exp = gram.choice(varExp.typedAs("v"), numExp.typedAs("n"))
+            const exp = gram.choice(varExp.as("v"), numExp.as("n"))
             const g = new gram.Grammar(exp)
 
             expect(g).to.satisfy(containmentOf(exp))
@@ -128,9 +126,9 @@ describe("Grammar", () => {
         })
 
         it("determines productions to be non-optional if any of its symbols is non-optional", () => {
-            const tuple1 = gram.production({left: identifier, right: identifier.optional()}).typedAs("1")
-            const tuple2 = gram.production({left: identifier.optional(), right: identifier}).typedAs("2")
-            const tuple3 = gram.production({left: identifier, right: identifier}).typedAs("3")
+            const tuple1 = gram.production({left: identifier, right: identifier.optional()}).as("1")
+            const tuple2 = gram.production({left: identifier.optional(), right: identifier}).as("2")
+            const tuple3 = gram.production({left: identifier, right: identifier}).as("3")
             const g = new gram.Grammar(gram.choice(tuple1, tuple2, tuple3))
 
             expect(g.isOptional(tuple1)).to.be.false
@@ -139,9 +137,9 @@ describe("Grammar", () => {
         })
 
         it("determines choices to be optional if any of its productions is optional", () => {
-            const choice1 = gram.choice(gram.production( {id: identifier}).typedAs("id"), gram.production({val: intLit.optional()}).typedAs("int"))
-            const choice2 = gram.choice(gram.production( {id: identifier.optional()}).typedAs("id"), gram.production({val: intLit}).typedAs("int"))
-            const choice3 = gram.choice(gram.production( {id: identifier.optional()}).typedAs("id"), gram.production({val: intLit.optional()}).typedAs("int"))
+            const choice1 = gram.choice(gram.production( {id: identifier}).as("id"), gram.production({val: intLit.optional()}).as("int"))
+            const choice2 = gram.choice(gram.production( {id: identifier.optional()}).as("id"), gram.production({val: intLit}).as("int"))
+            const choice3 = gram.choice(gram.production( {id: identifier.optional()}).as("id"), gram.production({val: intLit.optional()}).as("int"))
             const g = new gram.Grammar(gram.production( {c1: choice1, c2: choice2, c3: choice3}))
 
             expect(g.isOptional(choice1)).to.be.true
@@ -150,10 +148,29 @@ describe("Grammar", () => {
         })
 
         it("determines choices to be non-optional if all its symbols are non-optional", () => {
-            const choice = gram.choice(gram.production({id: identifier}).typedAs("id"), gram.production({val: intLit}).typedAs("int"))
+            const choice = gram.choice(gram.production({id: identifier}).as("id"), gram.production({val: intLit}).as("int"))
             const g = new gram.Grammar(choice)
 
             expect(g.isOptional(choice)).to.be.false
+        })
+
+        it("works correctly even for indirectly recursive rules", () => {
+            type R = 
+                  { type: "id", value: { id: string | null } } 
+                | { type: "subR", value: 
+                      { type: "num", value: number } 
+                    | { type: "rec", value: R } 
+                  }
+
+            const recursive = gram.recursively((self: gram.Repeatable<R>) => {
+                const subR = gram.choice(intLit.as("num"), self.as("rec"))
+                const r = gram.choice(gram.production({ id: identifier.optional() }).as("id"), subR.as("subR"))
+                return [r, { r, subR }]
+            })
+
+            const g = new gram.Grammar(recursive.r)
+
+            expect(g.isOptional(recursive.subR)).to.be.true
         })
 
     })
@@ -164,41 +181,41 @@ describe("Grammar", () => {
             const g = new gram.Grammar(identifier)
 
             expect(g.firstSetOf(identifier)?.size).to.equal(1)
-            expect(g.firstSetOf(identifier)).to.contain(identifier.tokenType)
+            expect(g.firstSetOf(identifier)).to.contain(idToken.tokenType)
         })
 
         it("is the first set of wrapped symbol, for an optional", () => {
             const optional = identifier.optional();
             const g = new gram.Grammar(optional)
 
-            expect(g.firstSetOf(optional)).to.deep.equal(g.firstSetOf(identifier))
+            expect(g.firstSetOf(optional)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
         })
 
         it("is the first set of wrapped symbol, for a zero-or-more", () => {
             const zeroOrMore = identifier.zeroOrMore();
             const g = new gram.Grammar(zeroOrMore)
 
-            expect(g.firstSetOf(zeroOrMore)).to.deep.equal(g.firstSetOf(identifier))
+            expect(g.firstSetOf(zeroOrMore)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
         })
 
         it("is the first set of wrapped symbol, for a one-or-more", () => {
             const oneOrMore = identifier.oneOrMore();
             const g = new gram.Grammar(oneOrMore)
 
-            expect(g.firstSetOf(oneOrMore)).to.deep.equal(g.firstSetOf(identifier))
+            expect(g.firstSetOf(oneOrMore)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
         })
 
         it("is the union of first sets of wrapped symbols, for a choice", () => {
             const choice = gram.choice(
-                gram.production({ name: identifier }).typedAs("id"),
-                gram.production({ value: intLit }).typedAs("int")
+                gram.production({ name: identifier }).as("id"),
+                gram.production({ value: intLit }).as("int")
             );
             const g = new gram.Grammar(choice)
 
-            expect(g.firstSetOf(choice)).to.deep.equal(new Set([
+            expect(g.firstSetOf(choice)).satisfies(aSetEqualTo(new Set([
                 ...g.firstSetOf(identifier),
                 ...g.firstSetOf(intLit),
-            ]))
+            ])))
         })
 
         it("is the union of first sets of the leading optional symbols and the first non-optional symbol, for a production", () => {
@@ -211,10 +228,32 @@ describe("Grammar", () => {
             
             const g = new gram.Grammar(prod)
 
-            expect(g.firstSetOf(prod)).to.deep.equal(new Set([
+            expect(g.firstSetOf(prod)).satisfies(aSetEqualTo(new Set([
                 ...g.firstSetOf(identifier),
                 ...g.firstSetOf(intLit),
-            ]))
+            ])))
+        })
+
+        it("works correctly even for indirectly recursive rules", () => {
+            type R = 
+                  { type: "id", value: string } 
+                | { type: "subR", value: 
+                      { type: "num", value: number } 
+                    | { type: "rec", value: R } 
+                  }
+
+            const recursive = gram.recursively((self: gram.Repeatable<R>) => {
+                const subR = gram.choice(intLit.as("num"), self.as("rec"))
+                const r = gram.choice(identifier.as("id"), subR.as("subR"))
+                return [r, { r, subR }]
+            })
+
+            const g = new gram.Grammar(recursive.r)
+
+            expect(g.firstSetOf(recursive.subR)).satisfies(aSetEqualTo(new Set([
+                ...g.firstSetOf(intLit),
+                ...g.firstSetOf(identifier),
+            ])))
         })
 
     })
@@ -225,86 +264,45 @@ describe("Grammar", () => {
             return new gram.Grammar(gram.production({ symbol, next }))
         }
 
-        function hasEmptyFollowSet<T>(symbol: gram.Repeatable<T>) {
-            expect(grammar(symbol, booleanLit).followSetOf(symbol)).to.deep.equal(new Set());
-            expect(grammar(symbol.optional(), booleanLit).followSetOf(symbol)).to.deep.equal(new Set());
-            expect(grammar(symbol.zeroOrMore(), booleanLit).followSetOf(symbol)).to.deep.equal(new Set());
-            expect(grammar(symbol.oneOrMore(), booleanLit).followSetOf(symbol)).to.deep.equal(new Set());
+        const begin = gram.terminal(tokens.keyword("begin")).tokenless()
+        const end = gram.terminal(tokens.keyword("end")).tokenless()
+
+        function wrap<T>(symbol: gram.Symbol<T>): gram.Grammar<{ begin: "begin", impl: T, end: "end" }> {
+            return new gram.Grammar((gram.production({
+                begin,
+                impl: symbol,
+                end
+            })))
         }
 
-        function hasFollowSetContainingFollowingFirstSets<T>(symbol: gram.Symbol<T>) {
-            const choice = gram.choice(
-                gram.production({ value: intLit }).typedAs("int"),
-                gram.production({ value: floatLit }).typedAs("float")
-            );
-            const g1 = grammar(symbol, choice);
-            const prod = gram.production({
-                int: intLit.optional(),
-                float: floatLit,
-                bool: booleanLit
-            });
-            const g2 = grammar(symbol, prod);
-
-            expect(g1.followSetOf(symbol)).to.deep.equal(g1.firstSetOf(choice));
-            expect(g2.followSetOf(symbol)).to.deep.equal(g2.firstSetOf(prod));
-        }
+        it("is EOF for start symbols", () => {
+            const g = wrap(gram.choice(intLit.as("int"), floatLit.as("float"), identifier.as("id")))
+            expect(g.followSetOf(g.start)).satisfies(aSetEqualTo(new Set([tokens.eof])))
+        })
     
-        it("is always empty, for terminals", () => {
-            hasEmptyFollowSet(identifier);
+        it("propagates from parent contexts for symbols followed by optional or empty symbols", () => {
+            const p = gram.production({ bool: booleanLit, int: intLit.zeroOrMore(), float: floatLit, id: identifier.optional() });
+            const g = wrap(p)
+            expect(g.followSetOf(identifier)).satisfies(aSetEqualTo(g.followSetOf(p)))
+            expect(g.followSetOf(floatLit)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(identifier), ...g.followSetOf(identifier)])))
+            expect(g.followSetOf(booleanLit)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(intLit), ...g.firstSetOf(floatLit)])))
         })
 
-        it("is the first set of the following symbols, for optionals", () => {
-            hasFollowSetContainingFollowingFirstSets(identifier.optional());
+        it("does not propagate from parent contexts for symbols followed by non optional symbols", () => {
+            const floats = floatLit.oneOrMore();
+            const g = wrap(gram.production( { int: intLit, float: floats, id: identifier }))
+            expect(g.followSetOf(floats)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
+            expect(g.followSetOf(intLit)).satisfies(aSetEqualTo(g.firstSetOf(floats)))
         })
 
-        it("is the first set of the following symbols, for zero-or-more", () => {
-            hasFollowSetContainingFollowingFirstSets(identifier.zeroOrMore());
+        it("propagates to all productions in a choice", () => {
+            const c = gram.choice(intLit.as("int"), floatLit.as("float"), identifier.as("id"));
+            const g = wrap(c)
+            expect(g.followSetOf(intLit)).satisfies(aSetEqualTo(g.followSetOf(c)))
+            expect(g.followSetOf(floatLit)).satisfies(aSetEqualTo(g.followSetOf(c)))
+            expect(g.followSetOf(identifier)).satisfies(aSetEqualTo(g.followSetOf(c)))
         })
-
-        it("is always empty, for non-optional choices", () => {
-            hasEmptyFollowSet(gram.choice(
-                gram.production({ value: intLit}).typedAs("int"),
-                gram.production({ value: floatLit}).typedAs("float"),
-            ))
-        })
-
-        it("is the first set of the following symbols, for optional choices", () => {
-            hasFollowSetContainingFollowingFirstSets(gram.choice(
-                gram.production({ value: intLit}).typedAs("int"),
-                gram.production({ value: floatLit.optional()}).typedAs("float"),
-            ))
-            hasFollowSetContainingFollowingFirstSets(gram.choice(
-                gram.production({ value: intLit.optional()}).typedAs("int"),
-                gram.production({ value: floatLit}).typedAs("float"),
-            ))
-            hasFollowSetContainingFollowingFirstSets(gram.choice(
-                gram.production({ value: intLit.optional()}).typedAs("int"),
-                gram.production({ value: floatLit.optional()}).typedAs("float"),
-            ))
-        })
-
-        it("is always empty, for productions with at least one non-optional symbol", () => {
-            hasEmptyFollowSet(gram.production({
-                a: intLit.optional(),
-                b: floatLit
-            }))
-            hasEmptyFollowSet(gram.production({
-                a: intLit,
-                b: floatLit.optional()
-            }))
-            hasEmptyFollowSet(gram.production({
-                a: intLit,
-                b: floatLit
-            }))
-        })
-
-        it("is the first set of the following symbols, for productions with all-optional sybols", () => {
-            hasFollowSetContainingFollowingFirstSets(gram.production({
-                a: intLit.optional(),
-                b: floatLit.optional()
-            }))
-        })
-
+    
     })
 
     describe("random", () => {
@@ -333,15 +331,15 @@ describe("Grammar", () => {
                     : ({ funName: null, parenOpen: "(", arg: n, parenClose: ")"})
             )
             const term = gram.choice(
-                floatLit.typedAs("lit"),
-                identifier.typedAs("id"),
-                funCall.typedAs("fun")
+                floatLit.as("lit"),
+                identifier.as("id"),
+                funCall.as("fun")
             ).mapped(
-                n => n.content, 
+                n => n.value, 
                 n => 
-                      typeof n == "number" ? ({type: "lit", content: n})
-                    : typeof n == "string" ? ({type: "id", content: n})
-                    : ({type: "fun", content: n})
+                      typeof n == "number" ? ({type: "lit", value: n})
+                    : typeof n == "string" ? ({type: "id", value: n})
+                    : ({type: "fun", value: n})
             )
             const factor = gram.production({
                 left: term,
@@ -389,6 +387,19 @@ describe("Grammar", () => {
     })
 
 })
+
+function aSetEqualTo<T>(expected: Set<T>): Function {
+    return (actual: Set<T>) => {
+        expect(actual.size).to.equal(expected.size);
+        for (const t of expected) {
+            expect(actual.has(t)).to.be.true;
+        }
+        for (const t of actual) {
+            expect(expected.has(t)).to.be.true;
+        }
+        return true;
+    };
+}
 
 function onOrMany<T, H extends T, L extends T>(...args: [H, ...L[]]): [H, ...L[]] {
     return args
