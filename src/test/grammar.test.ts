@@ -280,19 +280,19 @@ describe("Grammar", () => {
             expect(g.followSetOf(g.start)).satisfies(aSetEqualTo(new Set([tokens.eof])))
         })
     
-        it("propagates from parent contexts for symbols followed by optional or empty symbols", () => {
+        it(">>> propagates from parent contexts for symbols followed by optional or empty symbols", () => {
             const p = gram.production({ bool: booleanLit, int: intLit.zeroOrMore(), float: floatLit, id: identifier.optional() });
             const g = wrap(p)
-            expect(g.followSetOf(identifier)).satisfies(aSetEqualTo(g.followSetOf(p)))
-            expect(g.followSetOf(floatLit)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(identifier), ...g.followSetOf(identifier)])))
-            expect(g.followSetOf(booleanLit)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(intLit), ...g.firstSetOf(floatLit)])))
+            expect(g.followSetOf(p.definition.id)).satisfies(aSetEqualTo(g.followSetOf(p)))
+            expect(g.followSetOf(p.definition.float)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(p.definition.id), ...g.followSetOf(p.definition.id)])))
+            expect(g.followSetOf(p.definition.bool)).satisfies(aSetEqualTo(new Set([...g.firstSetOf(p.definition.int), ...g.firstSetOf(p.definition.float)])))
         })
 
         it("does not propagate from parent contexts for symbols followed by non optional symbols", () => {
-            const floats = floatLit.oneOrMore();
-            const g = wrap(gram.production( { int: intLit, float: floats, id: identifier }))
-            expect(g.followSetOf(floats)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
-            expect(g.followSetOf(intLit)).satisfies(aSetEqualTo(g.firstSetOf(floats)))
+            const p = gram.production({ int: intLit, float: floatLit.oneOrMore(), id: identifier });
+            const g = wrap(p)
+            expect(g.followSetOf(p.definition.float)).satisfies(aSetEqualTo(g.firstSetOf(p.definition.id)))
+            expect(g.followSetOf(p.definition.int)).satisfies(aSetEqualTo(g.firstSetOf(p.definition.float)))
         })
 
         it("propagates to all productions in a choice", () => {
