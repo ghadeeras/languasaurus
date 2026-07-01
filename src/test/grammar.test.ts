@@ -155,14 +155,7 @@ describe("Grammar", () => {
         })
 
         it("works correctly even for indirectly recursive rules", () => {
-            type R = 
-                  { type: "id", value: { id: string | null } } 
-                | { type: "subR", value: 
-                      { type: "num", value: number } 
-                    | { type: "rec", value: R } 
-                  }
-
-            const recursive = gram.recursively((self: gram.Repeatable<R>) => {
+            const recursive = gram.recursively(self => {
                 const subR = gram.choice(intLit.as("num"), self.as("rec"))
                 const r = gram.choice(gram.production({ id: identifier.optional() }).as("id"), subR.as("subR"))
                 return [r, { r, subR }]
@@ -219,18 +212,31 @@ describe("Grammar", () => {
         })
 
         it("is the union of first sets of the leading optional symbols and the first non-optional symbol, for a production", () => {
-            const prod = gram.production({ 
+            const prod1 = gram.production({ 
                 a: identifier.optional(), 
                 b: intLit, 
                 c: booleanLit.optional(), 
                 d: floatLit 
             });
+            const prod2 = gram.production({
+                half1: gram.production({
+                    a: identifier.optional(), 
+                    b: intLit, 
+                }),
+                c: booleanLit.optional(), 
+                d: floatLit 
+            });
             
-            const g = new gram.Grammar(prod)
+            const g1 = new gram.Grammar(prod1)
+            const g2 = new gram.Grammar(prod2)
 
-            expect(g.firstSetOf(prod)).satisfies(aSetEqualTo(new Set([
-                ...g.firstSetOf(identifier),
-                ...g.firstSetOf(intLit),
+            expect(g1.firstSetOf(prod1)).satisfies(aSetEqualTo(new Set([
+                ...g1.firstSetOf(identifier),
+                ...g1.firstSetOf(intLit),
+            ])))
+            expect(g2.firstSetOf(prod2)).satisfies(aSetEqualTo(new Set([
+                ...g2.firstSetOf(identifier),
+                ...g2.firstSetOf(intLit),
             ])))
         })
 
@@ -280,7 +286,7 @@ describe("Grammar", () => {
             expect(g.followSetOf(g.start)).satisfies(aSetEqualTo(new Set([tokens.eof])))
         })
     
-        it(">>> propagates from parent contexts for symbols followed by optional or empty symbols", () => {
+        it("propagates from parent contexts for symbols followed by optional or empty symbols", () => {
             const p = gram.production({ bool: booleanLit, int: intLit.zeroOrMore(), float: floatLit, id: identifier.optional() });
             const g = wrap(p)
             expect(g.followSetOf(p.definition.id)).satisfies(aSetEqualTo(g.followSetOf(p)))
@@ -313,18 +319,7 @@ describe("Grammar", () => {
 
     describe("random", () => {
 
-        type Exp = [PlusMinusExp , ...PlusMinusExp[]]
-        type PlusExp = { plus: Factor } 
-        type MinusExp = { minus: Factor } 
-        type PlusMinusExp = PlusExp | MinusExp 
-        type Factor = [ MulExp , ...MulDivExp[]]
-        type MulExp = { mul: Term }
-        type DivExp = { div: Term }
-        type MulDivExp =  MulExp | DivExp 
-        type Term = number | string | FunCall
-        type FunCall = { funName: string, arg: Exp} | Exp
-        
-        const productions = gram.recursively((self: gram.Repeatable<Exp>) => {
+        const productions = gram.recursively(self => {
             const funCall = gram.production({
                 funName: identifier.optional(),
                 parenOpen,
@@ -391,6 +386,75 @@ describe("Grammar", () => {
         // })
 
     })
+
+    describe("ll1EligiblityProblems", () => {
+
+        it("returns empty array if no LL(1) ambiguities in grammar", () => {
+            const symbols = gram.recursively(self => {
+                const param = gram.production({
+                    parenOpen,
+                    arg: self,
+                    parenClose
+                })
+                const funCall = gram.production({
+                    funName: identifier,
+                    param: param.optional()
+                })
+                const term = gram.choice(
+                    floatLit.as("lit"),
+                    funCall.as("fun"),
+                    param.as("parenthesized")
+                )
+                const factor = gram.production({
+                    left: term,
+                    right: gram.production({
+                        op: opFactor,
+                        value: term
+                    }).zeroOrMore()
+                })
+                const exp = gram.production({
+                    left: gram.production({
+                        op: opAdd.optional(),
+                        value: factor
+                    }),
+                    right: gram.production({
+                        op: opAdd,
+                        value: factor
+                    }).zeroOrMore() 
+                })
+                return [exp, { exp, funCall, term, factor, param }] 
+            })
+            const g = new gram.Grammar(symbols.exp)
+            const problems = g.ll1EligiblityProblems();
+            console.log(problems)
+            expect(problems).to.be.empty
+        })
+
+        it("returns a problem when an optional symbol is followed by another sharing some first tokens", () => {
+            const g = new gram.Grammar(gram.production({
+                optional: identifier.optional(),
+                required: identifier
+            }))
+            const problems = g.ll1EligiblityProblems();
+            console.log(problems)
+            expect(problems).to.be.not.empty
+        })
+
+        it("returns a problem when an choice symbol has productions sharing the same first symbols", () => {
+            const g = new gram.Grammar(gram.production({
+                first: identifier,
+                choice: gram.choice(
+                    identifier.as("prod1"),
+                    identifier.as("prod2"),
+                ),
+                second: identifier
+            }))
+            const problems = g.ll1EligiblityProblems();
+            console.log(problems)
+            expect(problems).to.be.not.empty
+        })
+
+    }) 
 
 })
 
