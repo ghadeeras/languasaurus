@@ -4,13 +4,34 @@ import * as utils from "./utils.js";
 
 export class Grammar<T> {
 
-    private optionality: Map<Symbol<any>, boolean> = this.apply(new OptionalityChecker(), null)
-    private firstSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FirstSetDeriver(this.optionality), null)
-    private followSets: Map<Symbol<any>, TokenTypeSet> = this.apply(new FollowSetDeriver(this.optionality, this.firstSets), new Set([tokens.eof]))
+    readonly symbols = this.start.accept(new SymbolsCollector(), "")
 
-    readonly symbols: Set<Symbol<any>> = new Set(this.optionality.keys())
+    private optionality = this.accept(new OptionalityChecker(), (o1, o2) => o1 === o2)
+    private firstSets = this.accept(new FirstSetDeriver(this.optionality), equalSets)
+    private followSets = this.accept(new FollowSetDeriver(this.optionality, this.firstSets), equalSets, set(tokens.eof))
     
     constructor(readonly start: Symbol<T>) {
+    }
+
+    private accept<O>(
+        visitor: Visitor<Map<Symbol<any>, O>, O>, 
+        equality: (o1: O, o2: O) => boolean, 
+        input: O | undefined = undefined
+    ) {
+        let result: Map<Symbol<any>, O> = input !== undefined ? map([this.start, input]) : map();
+        let changed = true;
+        while (changed) {
+            changed = false
+            const next = new Map<Symbol<any>, O>();
+            for (const [s, _] of this.symbols) {
+                const r = result.get(s);
+                const n = s.accept(visitor, result);
+                next.set(s, n);
+                changed ||= (r === undefined || !equality(r, n));
+            }
+            result = next;
+        }
+        return result;
     }
 
     random(): T {
@@ -30,17 +51,12 @@ export class Grammar<T> {
     }
 
     ll1EligiblityProblems(): string[] {
-        const visitor = new RecursiveVisitor(new LL1EligibilityVerifier(this.firstSets, this.followSets))
-        return visitor.visit(this.start, null)
+        const visitor = new LL1EligibilityVerifier(this.firstSets, this.followSets)
+        return [...this.symbols].flatMap(([s, p]) => s.accept(visitor, p))
     }
 
     private get<S, T>(set: Map<Symbol<any>, T>, symbol: Symbol<S>): T {
         return set.get(symbol) ?? this.notFound(symbol)
-    }
-
-    private apply<I, O>(evaluator: Evaluator<I, O>, input: I): Map<Symbol<any>, O> {
-        const visitor = new RecursiveVisitor(evaluator)
-        return visitor.visitUntilNoChanges(this.start, input)
     }
 
     private notFound<S, R>(symbol: Symbol<S>): R {
@@ -100,7 +116,7 @@ export interface Symbol<T> {
 
     size: number
 
-    accept<R>(visitor: Visitor<R>): R
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O
 
     random(): T
 
@@ -189,7 +205,7 @@ abstract class SymbolImpl<T> implements Symbol<T> {
 
     abstract size: number;
 
-    abstract accept<R>(visitor: Visitor<R>): R
+    abstract accept<I, O>(visitor: Visitor<I, O>, input: I): O
 
     abstract asyncRandom(evaluator: utils.LazyEvaluator, depth?: number): utils.SimplePromise<T>;
 
@@ -245,8 +261,8 @@ class OptionalImpl<T> extends NonRepeatableImpl<T | null> implements Optional<T>
         super()
     }
     
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitOptional(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitOptional(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T | null> {
@@ -275,8 +291,8 @@ class TerminalImpl<T> extends RepeatableImpl<tokens.Token<T>> implements Termina
         super()
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitTerminal(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitTerminal(this, input)
     }
     
     asyncRandom(evaluator: utils.LazyEvaluator): utils.SimplePromise<tokens.Token<T>> {
@@ -313,8 +329,8 @@ class ChoiceImpl<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>> exten
         return choice(...this.productions, symbol.as(key));
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitChoice(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitChoice(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<InferFromProductions<P>> {
@@ -353,8 +369,8 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
         return production(d as Record<K, S> & D)
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitProduction(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitProduction(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Structure<D>> {
@@ -393,8 +409,8 @@ class LazyImpl<T> extends RepeatableImpl<T> implements Lazy<T> {
         this.symbol = symbolSupplier(this)
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitLazy(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitLazy(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
@@ -415,8 +431,8 @@ class MappedNonRepeatableImpl<S, T> extends NonRepeatableImpl<T> implements Mapp
         super()
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitMappedNonRepeatable(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitMappedNonRepeatable(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
@@ -437,8 +453,8 @@ class MappedRepeatableImpl<S, T> extends RepeatableImpl<T> implements MappedRepe
         super()
     }
 
-    accept<R>(visitor: Visitor<R>): R {
-        return visitor.visitMappedRepeatable(this)
+    accept<I, O>(visitor: Visitor<I, O>, input: I): O {
+        return visitor.visitMappedRepeatable(this, input)
     }
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number): utils.SimplePromise<T> {
@@ -460,283 +476,203 @@ class DiscriminatedSymbolImpl<T extends string, S> extends MappedRepeatableImpl<
 
 }
 
-export interface Visitor<R> {
-    visitOptional<T>(symbol: Optional<T>): R;
-    visitTerminal<T>(symbol: Terminal<T>): R;
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>): R;
-    visitProduction<D extends Definition>(symbol: Production<D>): R;
-    visitLazy<S>(symbol: Lazy<S>): R;
-    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>): R;
-    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>): R;
+export interface Visitor<I, O> {
+    visitTerminal<T>(symbol: Terminal<T>, input: I): O;
+    visitOptional<T>(symbol: Optional<T>, input: I): O;
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: I): O;
+    visitProduction<D extends Definition>(symbol: Production<D>, input: I): O;
+    visitLazy<S>(symbol: Lazy<S>, input: I): O;
+    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: I): O;
+    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, input: I): O;
 }
 
-class RecursiveVisitor<I, O> implements Visitor<O> {
+class SymbolsCollector implements Visitor<string, Map<Symbol<any>, string>> {
 
-    private visited: Set<Symbol<any>> = new Set()
-    private cache: Map<Symbol<any>, O> = new Map()
-    private cacheChanged: boolean = true
+    private map = new Map<Symbol<any>, string>()
 
-    private stack: [string, I][] = []
-
-    constructor(private evaluator: Evaluator<I, O>) {}
-    
-    private get input(): I {
-        return this.stack[this.stack.length - 1][1]
+    visitTerminal<T>(symbol: Terminal<T>, path: string): Map<Symbol<any>, string> {
+        return this.map.set(symbol, path)
     }
 
-    private get path(): string {
-        return this.stack.length > 0 ? this.stack[this.stack.length - 1][0] + "/" : "/"
+    visitOptional<T>(symbol: Optional<T>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds([["?", symbol.symbol]], symbol, path)
     }
 
-    private get subEvaluator(): SubEvaluator<I, O> {
-        return this.evaluate.bind(this)
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds(symbol.productions.map(p => [p.type, p]), symbol, path)
     }
 
-    private evaluate(key: string, symbol: Symbol<any>, input: I): O {
-        const previousOutput = this.cache.get(symbol)
-        const newInput = previousOutput !== undefined ? this.evaluator.newInput(input, previousOutput) : input
-        return this.enter(this.path + key, newInput, () => symbol.accept(this))
+    visitProduction<D extends Definition>(symbol: Production<D>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds(Object.entries(symbol.definition), symbol, path)
     }
 
-    private enter<T>(path: string, input: I, logic: () => T): T {
-        this.stack.push([path, input])
-        try {
-            return logic()
-        } finally {
-            this.stack.pop()
-        }
+    visitLazy<S>(symbol: Lazy<S>, path: string): Map<Symbol<any>, string> {
+        return this.map.has(symbol) ? this.map : this.addChilds([["*", symbol.symbol]], symbol, path)
     }
 
-    private pass<S extends Symbol<any>>(symbol: S, resultSupplier: (symbol: S) => O): O {
-        let isRecursive = false;
-        return (
-              this.evaluator.recursiveValueSupplier !== undefined && (isRecursive = this.visited.has(symbol)) ? this.cache.get(symbol) ?? this.evaluator.recursiveValueSupplier()
-            : this.evaluator.recursiveValueSupplier === undefined ||  isRecursive ? this.doPass<S>(symbol, resultSupplier)
-            : this.topLevelPass<S>(symbol, resultSupplier)
-        )
+    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds([["~", symbol.symbol]], symbol, path)
     }
 
-    private topLevelPass<S extends Symbol<any>>(symbol: S, resultSupplier: (symbol: S) => O) {
-        this.visited.add(symbol)
-        try {
-            return this.doPass<S>(symbol, resultSupplier)
-        } finally {
-            this.visited.delete(symbol)
-        }
+    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds([["~", symbol.symbol]], symbol, path)
     }
 
-    private doPass<S extends Symbol<any>>(symbol: S, resultSupplier: (symbol: S) => O) {
-        const result = resultSupplier(symbol);
-        if (this.evaluator.recursiveValueSupplier !== undefined) {
-            const oldResult = this.cache.get(symbol)
-            this.cache.set(symbol, result)
-            const changed = oldResult === undefined || !this.evaluator.equal(result, oldResult);
-            this.cacheChanged ||= changed
-        }
-        return result;
-    }
-
-    visit<T>(symbol: Symbol<T>, input: I): O {
-        return this.evaluate("", symbol, input)
-    }
-
-    visitUntilNoChanges<T>(symbol: Symbol<T>, input: I): Map<Symbol<any>, O> {
-        while (this.cacheChanged) {
-            this.cacheChanged = false
-            this.visit(symbol, input)
-        }
-        const result = this.cache
-        this.cache = new Map()
-        this.cacheChanged = true
+    private addChilds(keyChildTuples: [string, Symbol<any>][], parent: Symbol<any>, path: string): Map<Symbol<any>, string> {
+        const result = this.map.set(parent, path);
+        keyChildTuples.forEach(([key, child]) => child.accept(this, path + "/" + key));
         return result
     }
 
-    visitOptional<T>(symbol: Optional<T>): O {
-        return this.pass(symbol, s => this.evaluator.optional(this.path, this.subEvaluator, s, this.input))
-    }
-
-    visitTerminal<T>(symbol: Terminal<T>): O {
-        return this.pass(symbol, s => this.evaluator.terminal(this.path, s, this.input))
-    }
-
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>): O {
-        return this.pass(symbol, s => this.evaluator.choice(this.path, this.subEvaluator, s, this.input))
-    }
-
-    visitProduction<D extends Definition>(symbol: Production<D>): O {
-        return this.pass(symbol, s => this.evaluator.production(this.path, this.subEvaluator, s, this.input))
-    }
-
-    visitLazy<S>(symbol: Lazy<S>): O {
-        return this.pass(symbol, s => this.evaluate(this.path, s.symbol, this.input))
-    }
-
-    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>): O {
-        return this.pass(symbol, s => this.evaluate(this.path, s.symbol, this.input))
-    }
-
-    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>): O {
-        return this.pass(symbol, s => this.evaluate(this.path, s.symbol, this.input))
-    }
-
 }
 
-interface Evaluator<I, O> {
+class OptionalityChecker implements Visitor<Map<Symbol<any>, boolean>, boolean> {
 
-    get recursiveValueSupplier(): (() => O) | undefined
-    equal(output: O, previousOutput: O): boolean
-    newInput(input: I, previousOutput: O): I
-
-    optional<T>(path: string, evaluator: SubEvaluator<I, O>, symbol: Optional<T>, input: I): O
-    terminal<T>(path: string, symbol: Terminal<T>, input: I): O
-    choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(path: string, evaluator: SubEvaluator<I, O>, symbol: Choice<P>, input: I): O
-    production<D extends Definition>(path: string, evaluator: SubEvaluator<I, O>, symbol: Production<D>, input: I): O
-
-}
-
-type SubEvaluator<I, O> = (key: string, symbol: Symbol<any>, input: I) => O
-
-class OptionalityChecker implements Evaluator<null, boolean> {
-
-    get recursiveValueSupplier(): (() => boolean) | undefined {
-        return () => false;
-    }
-
-    equal(output: boolean, previousOutput: boolean): boolean {
-        return output === previousOutput
-    }
-
-    newInput(): null {
-        return null
-    }
-
-    optional<T>(path: string, evaluator: SubEvaluator<null, boolean>, symbol: Optional<T>): boolean {
-        evaluator("", symbol.symbol, null)
-        return true
-    }
-
-    terminal<T>(): boolean {
+    visitTerminal(): boolean {
         return false
     }
 
-    choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(path: string, evaluator: SubEvaluator<null, boolean>, symbol: Choice<P>): boolean {
-        return symbol.productions.reduce((a, p) => evaluator(p.type, p, null) || a, false)
+    visitOptional(): boolean {
+        return true
     }
 
-    production<D extends Definition>(path: string, evaluator: SubEvaluator<null, boolean>, symbol: Production<D>): boolean {
-        return symbol.order.reduce((a, k) => evaluator(k.toString(), symbol.definition[k], null) && a, true)
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, boolean>): boolean {
+        return symbol.productions.reduce((a, p) => this.get(p, input) || a, false)
+    }
+
+    visitProduction<D extends Definition>(symbol: Production<D>, input: Map<Symbol<any>, boolean>): boolean {
+        return symbol.order.reduce((a, k) => this.get(symbol.definition[k], input) && a, true)
+    }
+    
+    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol<any>, boolean>): boolean {
+        return this.get(symbol.symbol, input)
+    }
+
+    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: Map<Symbol<any>, boolean>): boolean {
+        return this.get(symbol.symbol, input)
+    }
+
+    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, input: Map<Symbol<any>, boolean>): boolean {
+        return this.get(symbol.symbol, input)
+    }
+
+    private get<T>(symbol: Symbol<T>, input: Map<Symbol<any>, boolean>): boolean {
+        return input.get(symbol) ?? true
     }
 
 }
 
-class FirstSetDeriver implements Evaluator<null, TokenTypeSet> {
+class FirstSetDeriver implements Visitor<Map<Symbol<any>, TokenTypeSet>, TokenTypeSet> {
 
     constructor(private optionality: Map<Symbol<any>, boolean>) {
     }
 
-    get recursiveValueSupplier(): (() => TokenTypeSet) | undefined {
-        return () => new Set()
-    }
-
-    equal(output: TokenTypeSet, previousOutput: TokenTypeSet): boolean {
-        return output.size === previousOutput.size;
-    }
-
-    newInput(): null {
-        return null
-    }
-
-    optional<T>(path: string, evaluator: SubEvaluator<null, TokenTypeSet>, symbol: Optional<T>): TokenTypeSet {
-        return evaluator("", symbol.symbol, null)
-    }
-
-    terminal<T>(path: string, symbol: Terminal<T>): TokenTypeSet {
+    visitTerminal<T>(symbol: Terminal<T>): TokenTypeSet {
         return new Set([symbol.tokenType])
     }
 
-    choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(path: string, evaluator: SubEvaluator<null, TokenTypeSet>, symbol: Choice<P>): TokenTypeSet {
+    visitOptional<T>(symbol: Optional<T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.get(symbol.symbol, input)
+    }
+
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
         return symbol.productions
-            .map(p => evaluator(p.type, p, null))
+            .map(p => this.get(p, input))
             .reduce(merge, new Set<tokens.TokenType<any>>())
     }
 
-    production<D extends Definition>(path: string, evaluator: SubEvaluator<null, TokenTypeSet>, symbol: Production<D>): TokenTypeSet {
+    visitProduction<D extends Definition>(symbol: Production<D>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
         const firstNonOptional = symbol.order.findIndex(k => !this.optionality.get(symbol.definition[k]))
         return symbol.order
-            .map((k, i) => [evaluator(k.toString(), symbol.definition[k], null), i] as const)
+            .map((k, i) => [this.get(symbol.definition[k], input), i] as const)
             .filter(([_, i]) => i <= firstNonOptional)
             .reduce((set, [s, _]) => merge(set, s), new Set<tokens.TokenType<any>>())
     }
 
+    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.get(symbol.symbol, input)
+    }
+
+    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.get(symbol.symbol, input)
+    }
+
+    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.get(symbol.symbol, input)
+    }
+
+    private get<T>(symbol: Symbol<T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return input.get(symbol) ?? new Set()
+    }
+
 }
 
-class FollowSetDeriver implements Evaluator<TokenTypeSet, TokenTypeSet> {
+class FollowSetDeriver implements Visitor<Map<Symbol<any>, TokenTypeSet>, TokenTypeSet> {
 
     constructor(private optionality: Map<Symbol<any>, boolean>, private firstSets: Map<Symbol<any>, TokenTypeSet>) {
     }
 
-    get recursiveValueSupplier(): (() => TokenTypeSet) | undefined {
-        return () => new Set()
+    visitTerminal<T>(symbol: Terminal<T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.get(symbol, input)
     }
 
-    equal(output: TokenTypeSet, previousOutput: TokenTypeSet): boolean {
-        if (output.size < previousOutput.size) {
-            console.log("what?!")
-        }
-        return output.size === previousOutput.size;
+    visitOptional<T>(symbol: Optional<T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.pass(this.get(symbol, input), symbol.symbol, input);
     }
 
-    newInput(input: TokenTypeSet, previousOutput: TokenTypeSet): TokenTypeSet {
-        return merge(input, previousOutput)
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return symbol.productions.reduce((r, p) => this.pass(r, p, input), this.get(symbol, input))
     }
 
-    optional<T>(path: string, evaluator: SubEvaluator<TokenTypeSet, TokenTypeSet>, symbol: Optional<T>, input: TokenTypeSet): TokenTypeSet {
-        return evaluator("", symbol.symbol, input)
-    }
-
-    terminal<T>(path: string, _symbol: Terminal<T>, input: TokenTypeSet): TokenTypeSet {
-        return input
-    }
-
-    choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(path: string, evaluator: SubEvaluator<TokenTypeSet, TokenTypeSet>, symbol: Choice<P>, input: TokenTypeSet): TokenTypeSet {
-        return symbol.productions.map(p => evaluator(p.type, p, input))[0]
-    }
-
-    production<D extends Definition>(path: string, evaluator: SubEvaluator<TokenTypeSet, TokenTypeSet>, symbol: Production<D>, input: TokenTypeSet): TokenTypeSet {
-        let followSet = input
+    visitProduction<D extends Definition>(symbol: Production<D>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        const result = this.get(symbol, input)
+        let followSet = result
         for (let i = symbol.order.length - 1; i >= 0; i--) {
             const key = symbol.order[i];
             const s = symbol.definition[key]
-            evaluator(key.toString(), s, followSet)
-            const nextFirstSet = this.firstSets.get(s) ?? new Set()
+            this.pass(followSet, s, input)
+            const nextFirstSet = this.get(s, this.firstSets)
             followSet = this.optionality.get(s) ? merge(followSet, nextFirstSet) : nextFirstSet
         }
-        return input
+        return result
+    }
+
+    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.pass(this.get(symbol, input), symbol.symbol, input);
+    }
+
+    visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.pass(this.get(symbol, input), symbol.symbol, input);
+    }
+
+    visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return this.pass(this.get(symbol, input), symbol.symbol, input);
+    }
+
+    private pass(result: TokenTypeSet, child: Symbol<any>, input: Map<Symbol<any>, TokenTypeSet>) {
+        input.set(child, merge(result, this.get(child, input)));
+        return result
+    }
+
+    private get<T>(symbol: Symbol<T>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return input.get(symbol) ?? new Set()
     }
 
 }
 
-class LL1EligibilityVerifier implements Evaluator<null, string[]> {
+class LL1EligibilityVerifier implements Visitor<string, string[]> {
 
     constructor(
         private firstSets: Map<Symbol<any>, TokenTypeSet>,
         private followSets: Map<Symbol<any>, TokenTypeSet>,
     ) {}
 
-    get recursiveValueSupplier(): (() => string[]) | undefined {
-        return () => []
+    visitTerminal(): string[] {
+        return []
     }
 
-    equal(): boolean {
-        return true
-    }
-
-    newInput(): null {
-        return null
-    }
-
-    optional<T>(path: string, evaluator: SubEvaluator<null, string[]>, symbol: Optional<T>): string[] {
-        let output = evaluator("", symbol.symbol, null)
+    visitOptional<T>(symbol: Optional<T>, path: string): string[] {
+        const output = []
         const firstSet = this.firstSets.get(symbol);
         const followSet = this.followSets.get(symbol);
         for (const token of this.tokensOf(firstSet)) {
@@ -748,12 +684,8 @@ class LL1EligibilityVerifier implements Evaluator<null, string[]> {
         return output
     }
 
-    terminal<T>(): string[] {
-        return []
-    }
-
-    choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(path: string, evaluator: SubEvaluator<null, string[]>, symbol: Choice<P>): string[] {
-        const output = symbol.productions.flatMap(p => evaluator(p.type, p, null))
+    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, path: string): string[] {
+        const output = []
         const flatFirstSet = symbol.productions.map(p => this.firstSets.get(p)).flatMap(s => [...this.tokensOf(s)])
         const firstSet = this.firstSets.get(symbol);
         const firstSetSize = firstSet !== undefined ? firstSet.size : 0
@@ -763,8 +695,20 @@ class LL1EligibilityVerifier implements Evaluator<null, string[]> {
         return output
     }
 
-    production<D extends Definition>(path: string, evaluator: SubEvaluator<null, string[]>, symbol: Production<D>): string[] {
-        return symbol.order.flatMap(key => evaluator(key.toString(), symbol.definition[key], null))
+    visitProduction(): string[] {
+        return []
+    }
+
+    visitLazy(): string[] {
+        return []
+    }
+
+    visitMappedNonRepeatable(): string[] {
+        return []
+    }
+
+    visitMappedRepeatable(): string[] {
+        return []
     }
 
     private *tokensOf(set: TokenTypeSet | undefined) {
@@ -780,10 +724,6 @@ class LL1EligibilityVerifier implements Evaluator<null, string[]> {
         return set !== undefined ? set.has(token) : false
     }
 
-}
-
-function merge<T>(s1: Set<T>, s2: Set<T>): Set<T> {
-    return new Set([...s1, ...s2])
 }
 
 function zeroOrMore<T>(symbol: Repeatable<T>): NonRepeatable<T[]> {
@@ -832,3 +772,20 @@ function toLinkedList<T>(l: T[]): LinkedList<T> {
 function toCon<T>(l: T[]): Con<T> {
     return toLinkedList(l) as Con<T>
 }
+
+function set<T>(...items: T[]): Set<T> {
+    return new Set(items)
+}
+
+function map<K, V>(...entries: [K, V][]): Map<K, V> {
+    return new Map(entries)
+}
+
+function merge<T>(s1: Set<T>, s2: Set<T>): Set<T> {
+    return new Set([...s1, ...s2])
+}
+
+function equalSets<T>(s1: Set<T>, s2: Set<T>): boolean {
+    return s1.size === s2.size && [...s1].every(v => s2.has(v))
+}
+

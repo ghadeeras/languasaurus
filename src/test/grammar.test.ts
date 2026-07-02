@@ -425,6 +425,7 @@ describe("Grammar", () => {
                 return [exp, { exp, funCall, term, factor, param }] 
             })
             const g = new gram.Grammar(symbols.exp)
+            console.log(g.symbols.values())
             const problems = g.ll1EligiblityProblems();
             console.log(problems)
             expect(problems).to.be.empty
