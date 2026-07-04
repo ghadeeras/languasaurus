@@ -54,14 +54,14 @@ export class Scanner<D extends TokenDefinitions> {
         while (stream.hasMoreSymbols()) {
             yield this.next(stream, matcher)
         }
-        yield tokens.eof.token("\u0000", stream.position())
+        yield tokens.eof.random(stream.position())
     }
     
     nextToken(stream: streams.InputStream<number>) {
         const matcher = new ScanningMatcher(this.automaton.newMatcher())
         return stream.hasMoreSymbols() ? 
             this.next(stream, matcher) : 
-            tokens.eof.token("\u0000", stream.position())
+            tokens.eof.random(stream.position())
     }
     
     randomToken(shortness = 0.1) {

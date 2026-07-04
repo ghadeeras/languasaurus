@@ -15,6 +15,10 @@ export interface TokenType<T> {
 
     serializedAs(serializer: (value: T) => string): TokenType<T>
 
+    random(position: streams.StreamPosition): Token<T>
+
+    replacing(token: Token<any>): Token<T>
+
 }
 
 class TokenTypeImpl<T> implements TokenType<T> {
@@ -49,11 +53,21 @@ class TokenTypeImpl<T> implements TokenType<T> {
         return new TokenTypeImpl(this.pattern, this.parser, serializer)
     }
 
+    random(position: streams.StreamPosition): Token<T> {
+        const lexeme = this.pattern.random()
+        return new Token(this, lexeme, position)
+    }
+
+    replacing(token: Token<any>): Token<T> {
+        const lexeme = this.pattern.random()
+        return new Token(this, lexeme, token.position, token)
+    }
+
 }
 
 export const error: TokenType<Error> = new TokenTypeImpl(regex.charNotIn("\u0000-\uffff"), s => new Error(s), s => s.message)
 
-export const eof: TokenType<null> = new TokenTypeImpl(regex.char("\u0000"), s => null, s => "")
+export const eof: TokenType<null> = new TokenTypeImpl(regex.word("\u0000EOF\u0000"), s => null, s => "")
 
 export function string(pattern: regex.RegEx): TokenType<string> {
     return new TokenTypeImpl(pattern, s => s, s => s)
@@ -90,7 +104,8 @@ export class Token<T> {
     constructor(
         readonly tokenType: TokenType<T>,
         readonly lexeme: string,
-        readonly position: streams.StreamPosition
+        readonly position: streams.StreamPosition,
+        readonly replacedToken: Token<any> | null = null
     ) {
         this.value = tokenType.parse(lexeme)
     }

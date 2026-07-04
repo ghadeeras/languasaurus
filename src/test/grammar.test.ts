@@ -377,13 +377,13 @@ describe("Grammar", () => {
             return [exp, { exp, funCall, term, factor }] 
         })
 
-        // it(">>> generates random parse trees", () => {
-        //     const tree = productions.exp.random()
-        //     console.log([...productions.exp.tokens(tree)]
-        //         .map(t => t.lexeme)
-        //         .reduce((a, b) => a.concat(b), "")
-        //     )
-        // })
+        it.skip("generates random parse trees", () => {
+            const tree = productions.exp.random()
+            console.log([...productions.exp.tokens(tree)]
+                .map(t => t.lexeme)
+                .reduce((a, b) => a.concat(b), "")
+            )
+        })
 
     })
 

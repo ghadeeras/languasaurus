@@ -1,3 +1,4 @@
+import { TokenDefinitions } from "./scanning.js";
 import { StreamPosition } from "./streams.js";
 import * as tokens from "./tokens.js";
 import * as utils from "./utils.js";
@@ -16,20 +17,24 @@ export class Grammar<T> {
     private accept<O>(
         visitor: Visitor<Map<Symbol<any>, O>, O>, 
         equality: (o1: O, o2: O) => boolean, 
-        input: O | undefined = undefined
+        startSymbolInitialResult: O | undefined = undefined,
     ) {
-        let result: Map<Symbol<any>, O> = input !== undefined ? map([this.start, input]) : map();
+        let result = startSymbolInitialResult !== undefined ? map([this.start, startSymbolInitialResult]) : map<Symbol<any>, O>();
         let changed = true;
         while (changed) {
-            changed = false
             const next = new Map<Symbol<any>, O>();
             for (const [s, _] of this.symbols) {
-                const r = result.get(s);
-                const n = s.accept(visitor, result);
-                next.set(s, n);
-                changed ||= (r === undefined || !equality(r, n));
+                next.set(s, s.accept(visitor, result));
             }
-            result = next;
+            changed = false
+            for (const [s, _] of this.symbols) {
+                const r = result.get(s);
+                const n = next.get(s);
+                changed ||= (r === undefined || n === undefined || !equality(r, n));
+            }
+            if (startSymbolInitialResult == undefined) {
+                result = next;
+            }
         }
         return result;
     }
@@ -80,6 +85,18 @@ export type DiscriminatedNode<D extends string, T> = {
 
 export type Definition = Record<string, Symbol<any>>
 export type TokenTypeSet = Set<tokens.TokenType<any>>
+
+export type TerminalDefinitions<D extends Record<string, tokens.TokenType<any>>> = {
+    [k in keyof D]: D[k] extends tokens.TokenType<infer T> ? Terminal<T> : never
+};
+
+export function terminals<D extends TokenDefinitions>(definitions: D): TerminalDefinitions<D> {
+    const result: Partial<TerminalDefinitions<any>> = {}
+    for (const key in definitions) {
+        result[key] = terminal(definitions[key])
+    }
+    return result as TerminalDefinitions<D>
+}
 
 export function terminal<T>(tokenType: tokens.TokenType<T>): Terminal<T> {
     return new TerminalImpl(tokenType)
@@ -763,7 +780,7 @@ function toNonEmptyList<T>(n: Con<T>): [T, ...T[]] {
 
 function toLinkedList<T>(l: T[]): LinkedList<T> {
     let tail: LinkedList<T> = null
-    for (const head of l) {
+    for (const head of [...l].reverse()) {
         tail = { head, tail }
     }
     return tail
