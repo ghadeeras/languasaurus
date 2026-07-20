@@ -2,7 +2,7 @@ import * as gram from "./grammar.js"
 import * as lex from "./scanning.js"
 import * as tokens from "./tokens.js"
 import { TextInputStream } from "./streams.js"
-import { OneOrMore } from "./utils.js"
+import { KeyOf } from "./utils.js"
 
 export function recursiveDescentParser<T, D extends lex.TokenDefinitions>(tokenDefinitions: D, start: gram.Symbol<T>, whitespace: Set<tokens.TokenType<any>> | undefined = undefined): (input: TextInputStream) => T {
     const grammar = new gram.Grammar(start)
@@ -104,7 +104,7 @@ export class LookAhead {
 export interface ParsingVisitor {
     visitTerminal<T>(symbol: gram.Terminal<T>, input: LookAhead): tokens.Token<T>;
     visitOptional<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Optional<T>, input: LookAhead): T | null;
-    visitChoice<P extends OneOrMore<gram.DiscriminatedSymbol<any, any>>>(acceptor: ParsingVisitorAcceptor, symbol: gram.Choice<P>, input: LookAhead): gram.InferFromProductions<P>;
+    visitChoice<P extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Choice<P>, input: LookAhead): gram.Cases<P>;
     visitProduction<D extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Production<D>, input: LookAhead): gram.Structure<D>;
     visitLazy<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Lazy<T>, input: LookAhead): T;
     visitMappedNonRepeatable<S, T>(acceptor: ParsingVisitorAcceptor, symbol: gram.MappedNonRepeatable<S, T>, input: LookAhead): T;
@@ -135,7 +135,7 @@ export class RecursiveDescentParsing implements gram.Visitor<LookAhead, any>, Pa
         return this.visitor.visitOptional(this, symbol, input)
     }
 
-    visitChoice<P extends OneOrMore<gram.DiscriminatedSymbol<any, any>>>(symbol: gram.Choice<P>, input: LookAhead) {
+    visitChoice<P extends gram.Definition>(symbol: gram.Choice<P>, input: LookAhead) {
         return this.visitor.visitChoice(this, symbol, input)
     }
 
@@ -188,25 +188,27 @@ export class RecursiveDescentParsingVisitor implements ParsingVisitor {
             : acceptor.accept(symbol.symbol, input)
     }
 
-    visitChoice<P extends OneOrMore<gram.DiscriminatedSymbol<any, any>>>(acceptor: ParsingVisitorAcceptor, symbol: gram.Choice<P>, input: LookAhead): gram.InferFromProductions<P> {
-        const productions = symbol.productions.filter(this.mustSkip(symbol, input.current)
-            ? p => this.grammar.isOptional(p)
+    visitChoice<P extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Choice<P>, input: LookAhead): gram.Cases<P> {
+        const allProductions = Object.entries(symbol.productions)
+        const productions = allProductions.filter(this.mustSkip(symbol, input.current)
+            ? ([k, p]) => this.grammar.isOptional(p)
             : _ => true
         )
-        for (const p of productions) {
+        for (const [k, p] of productions) {
             if (this.grammar.firstSetOf(p).has(input.current.tokenType)) {
-                return acceptor.accept(p, input) as gram.InferFromProductions<P>
+                return ({ type: k, value: acceptor.accept(p, input) }) as gram.Cases<P>
             }
         }
-        const p = productions.length > 0 ? productions[0] : symbol.productions[0]
-        return acceptor.accept(p, input) as gram.InferFromProductions<P>
+        const [k, p] = productions.length > 0 ? productions[0] : allProductions[0]
+        return ({ type: k, value: acceptor.accept(p, input) }) as gram.Cases<P>
     }
 
     visitProduction<D extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Production<D>, input: LookAhead): gram.Structure<D> {
         const result: Partial<gram.Structure<D>> = {}
         for (const k of symbol.order) {
+            const key = k as KeyOf<D>
             const s = symbol.definition[k]
-            result[k] = acceptor.accept(s, input)
+            result[key] = acceptor.accept(s, input)
         }
         return result as gram.Structure<D>
     }

@@ -71,14 +71,13 @@ export class Grammar<T> {
 }
 
 export type InferFrom<S extends Symbol<any>> = S extends Symbol<infer T> ? T : never 
-export type InferFromProductions<P extends Symbol<any>[]> = 
-      P extends [infer H extends Symbol<any>] ? InferFrom<H>
-    : P extends [infer H extends Symbol<any>, ...infer T extends Symbol<any>[]] ? InferFrom<H> | InferFromProductions<T> 
-    : never 
+export type Cases<D extends Definition> = {
+    [k in utils.KeyOf<D>]: k extends string ? Case<k, InferFrom<D[k]>> : never
+}[utils.KeyOf<D>]
 export type Structure<D extends Definition> = {
-    [k in keyof D]: InferFrom<D[k]>
+    [k in utils.KeyOf<D>]: InferFrom<D[k]>
 }
-export type DiscriminatedNode<D extends string, T> = {
+export type Case<D extends string, T> = {
     type: D,
     value: T
 }
@@ -102,21 +101,15 @@ export function terminal<T>(tokenType: tokens.TokenType<T>): Terminal<T> {
     return new TerminalImpl(tokenType)
 }
 
-export function choice<P extends [DiscriminatedSymbol<any, any>, ...DiscriminatedSymbol<any, any>[]]>(...productions: P): Choice<P> {
-    return new ChoiceImpl(productions)
+export function choice<D extends Definition>(productions: D | (() => D)): Repeatable<Cases<D>> {
+    return typeof productions === "function" ?  recursive(() => new ChoiceImpl(productions)) : new ChoiceImpl(() => productions)
 }
-export function choiceOf<K extends string, S extends Repeatable<any>>(key: K, symbol: S): Choice<[DiscriminatedSymbol<K, S>]> {
-    return choice(symbol.as(key))
-}
-
-export function production<D extends Definition>(definition: D, order: (keyof D)[] = Object.keys(definition)): Production<D> {
-    return new ProductionImpl(definition, order)
+export function production<D extends Definition>(definition: D | (() => D), order: utils.KeyOf<D>[] | undefined = undefined): Repeatable<Structure<D>> {
+    return typeof definition === "function" ?  recursive(() => new ProductionImpl(definition, order)) : new ProductionImpl(() => definition, order)
 }
 
-export function productionOf<K extends string, S extends Symbol<any>>(key: K, symbol: S): Production<Record<K, S>> {
-    const d: Definition = {}
-    d[key] = symbol
-    return production(d as Record<K, S>)
+function recursive<T>(definition: () => Repeatable<T>): Repeatable<T> {
+    return new LazyImpl<T>(() => definition())
 }
 
 export function recursively<T = any, R extends Definition = Definition>(definition: (self: Repeatable<T>) => [Repeatable<T>, R]): R {
@@ -143,25 +136,13 @@ export interface Symbol<T> {
 
 }
 
-export interface NonDiscriminatedSymbol<T> extends Symbol<T> {
-
-    as<D extends string>(type: D): DiscriminatedSymbol<D, T>
-
-} 
-
-export interface DiscriminatedSymbol<D extends string, T> extends Symbol<DiscriminatedNode<D, T>> {
-
-    type: D
-
-} 
-
-export interface NonRepeatable<T> extends NonDiscriminatedSymbol<T> {
+export interface NonRepeatable<T> extends Symbol<T> {
 
     mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): NonRepeatable<R>
 
 }
 
-export interface Repeatable<T> extends NonDiscriminatedSymbol<T> {
+export interface Repeatable<T> extends Symbol<T> {
 
     optional(): Optional<T>
     zeroOrMore(): NonRepeatable<T[]>
@@ -185,21 +166,17 @@ export interface Terminal<T> extends Repeatable<tokens.Token<T>> {
 
 }
 
-export interface Choice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>> extends Repeatable<InferFromProductions<P>> {
+export interface Choice<P extends Definition> extends Repeatable<Cases<P>> {
 
     readonly productions: P
-
-    or<K extends string, S extends Repeatable<any>>(key: K, symbol: S): Choice<[...P, DiscriminatedSymbol<K, S>]>
 
 }
 
 export interface Production<D extends Definition> extends Repeatable<Structure<D>> {
 
     readonly definition: D
-    readonly order: (keyof D)[]
+    readonly order: utils.KeyOf<D>[]
     
-    then<K extends string, S extends Symbol<any>>(key: K, symbol: S): Production<Record<K, S> & D>
-
 }
 
 export interface Lazy<T> extends Repeatable<T> {
@@ -234,15 +211,7 @@ abstract class SymbolImpl<T> implements Symbol<T> {
     
 }
 
-abstract class NonDiscriminatedSymbolImpl<T> extends SymbolImpl<T> implements NonDiscriminatedSymbol<T> {
-
-    as<S extends string>(type: S): DiscriminatedSymbol<S, T> {
-        return new DiscriminatedSymbolImpl(type, this)
-    }
-
-}
-
-abstract class NonRepeatableImpl<T> extends NonDiscriminatedSymbolImpl<T> implements NonRepeatable<T> {
+abstract class NonRepeatableImpl<T> extends SymbolImpl<T> implements NonRepeatable<T> {
 
     mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): NonRepeatable<R> {
         return new MappedNonRepeatableImpl(this, toMapper, fromMapper)
@@ -250,7 +219,7 @@ abstract class NonRepeatableImpl<T> extends NonDiscriminatedSymbolImpl<T> implem
 
 }
 
-abstract class RepeatableImpl<T> extends NonDiscriminatedSymbolImpl<T> implements Repeatable<T> {
+abstract class RepeatableImpl<T> extends SymbolImpl<T> implements Repeatable<T> {
 
     optional(): Optional<T> {
         return new OptionalImpl(this)
@@ -333,36 +302,43 @@ class TerminalImpl<T> extends RepeatableImpl<tokens.Token<T>> implements Termina
 
 }
 
-class ChoiceImpl<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>> extends RepeatableImpl<InferFromProductions<P>> implements Choice<P> {
+class ChoiceImpl<P extends Definition> extends RepeatableImpl<Cases<P>> implements Choice<P> {
 
     readonly kind = "choice"
-    readonly size: number = this.productions.map(p => p.size).reduce((a, b) => a + b, 0)
 
-    constructor(readonly productions: P) {
+    private _productions = new utils.LazyExpression(this.productionsSupplier)
+
+    constructor(private productionsSupplier: () => P) {
         super()
     }
 
-    or<K extends string, S extends Repeatable<any>>(key: K, symbol: S): Choice<[...P, DiscriminatedSymbol<K, S>]> {
-        return choice(...this.productions, symbol.as(key));
+    get productions() {
+        return this._productions.value
+    }
+
+    get size() {
+        return Object.values(this.productions).map(p => p.size).reduce((a, b) => a + b, 0)
     }
 
     accept<I, O>(visitor: Visitor<I, O>, input: I): O {
         return visitor.visitChoice(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<InferFromProductions<P>> {
+    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Cases<P>> {
         let dice = utils.randomInt(this.size)
         let i = 0
-        while (dice > this.productions[i].size) {
-            dice -= this.productions[i++].size
+        const productions = Object.entries(this.productions);
+        while (dice > 0) {
+            dice -= productions[i++][1].size
         }
-        return this.productions[i].asyncRandom(evaluator, depth) as unknown as utils.SimplePromise<InferFromProductions<P>>
+        i = Math.min(i, productions.length - 1)
+        return productions[i][1].asyncRandom(evaluator, depth).then(value => ({ type: productions[i][0], value })) as unknown as utils.SimplePromise<Cases<P>>
     }
 
-    *tokens(value: InferFromProductions<P>): Generator<tokens.Token<any>> {
-        for (const p of this.productions) {
-            if (p.type === value.type) {
-                for (const t of p.tokens(value)) {
+    *tokens(value: Cases<P>): Generator<tokens.Token<any>> {
+        for (const [k, p] of Object.entries(this.productions)) {
+            if (k === value.type) {
+                for (const t of p.tokens(value.value)) {
                     yield t
                 }
             }
@@ -374,16 +350,24 @@ class ChoiceImpl<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>> exten
 class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> implements Production<D> {
 
     readonly kind = "production"
-    readonly size: number = this.order.map(k => this.definition[k].size).reduce((a, b) => a * b, 1)
+
+    private _definition = new utils.LazyExpression(this.definitionSupplier)
+    private _order = new utils.LazyExpression(() => this.customOrder !== undefined ? this.customOrder : Object.keys(this.definition) as utils.KeyOf<D>[])
     
-    constructor(readonly definition: D, readonly order: (keyof D)[]) {
+    constructor(private definitionSupplier: () => D, private customOrder: utils.KeyOf<D>[] | undefined = undefined) {
         super()
     }
+
+    get definition() {
+        return this._definition.value
+    }
+
+    get order() {
+        return this._order.value
+    }
     
-    then<K extends string, S extends Symbol<any>>(key: K, symbol: S): Production<Record<K, S> & D> {
-        const d: Definition = { ...this.definition }
-        d[key] = symbol
-        return production(d as Record<K, S> & D)
+    get size() {
+        return this.order.map(k => this.definition[k].size).reduce((a, b) => a * b, 1)
     }
 
     accept<I, O>(visitor: Visitor<I, O>, input: I): O {
@@ -392,7 +376,8 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
 
     asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Structure<D>> {
         let content = evaluator<Partial<Structure<D>>>(() => ({}))
-        for (const key of this.order) {
+        for (const k of this.order) {
+            const key = k as utils.KeyOf<D>
             content = content.then(c => {
                 const value = this.definition[key].asyncRandom(evaluator, depth + 1);
                 return value.then(v => {
@@ -407,7 +392,8 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
     *tokens(value: Structure<D>): Generator<tokens.Token<any>> {
         for (const k of this.order) {
             if (k in value) {
-                for (const t of this.definition[k].tokens(value[k])) {
+                const key = k as utils.KeyOf<D>
+                for (const t of this.definition[key].tokens(value[key])) {
                     yield t;
                 }
             }
@@ -484,19 +470,10 @@ class MappedRepeatableImpl<S, T> extends RepeatableImpl<T> implements MappedRepe
 
 }
 
-class DiscriminatedSymbolImpl<T extends string, S> extends MappedRepeatableImpl<S, DiscriminatedNode<T, S>> implements DiscriminatedSymbol<T, S> {
-    
-    
-    constructor(readonly type: T, readonly symbol: Symbol<S>) {
-        super(symbol, node => ({ type, value: node }), node => node.value)
-    }
-
-}
-
 export interface Visitor<I, O> {
     visitTerminal<T>(symbol: Terminal<T>, input: I): O;
     visitOptional<T>(symbol: Optional<T>, input: I): O;
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: I): O;
+    visitChoice<P extends Definition>(symbol: Choice<P>, input: I): O;
     visitProduction<D extends Definition>(symbol: Production<D>, input: I): O;
     visitLazy<S>(symbol: Lazy<S>, input: I): O;
     visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: I): O;
@@ -515,8 +492,8 @@ class SymbolsCollector implements Visitor<string, Map<Symbol<any>, string>> {
         return this.addChilds([["?", symbol.symbol]], symbol, path)
     }
 
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, path: string): Map<Symbol<any>, string> {
-        return this.addChilds(symbol.productions.map(p => [p.type, p]), symbol, path)
+    visitChoice<P extends Definition>(symbol: Choice<P>, path: string): Map<Symbol<any>, string> {
+        return this.addChilds(Object.entries(symbol.productions), symbol, path)
     }
 
     visitProduction<D extends Definition>(symbol: Production<D>, path: string): Map<Symbol<any>, string> {
@@ -553,8 +530,8 @@ class OptionalityChecker implements Visitor<Map<Symbol<any>, boolean>, boolean> 
         return true
     }
 
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, boolean>): boolean {
-        return symbol.productions.reduce((a, p) => this.get(p, input) || a, false)
+    visitChoice<P extends Definition>(symbol: Choice<P>, input: Map<Symbol<any>, boolean>): boolean {
+        return Object.values(symbol.productions).reduce((a, p) => this.get(p, input) || a, false)
     }
 
     visitProduction<D extends Definition>(symbol: Production<D>, input: Map<Symbol<any>, boolean>): boolean {
@@ -592,8 +569,8 @@ class FirstSetDeriver implements Visitor<Map<Symbol<any>, TokenTypeSet>, TokenTy
         return this.get(symbol.symbol, input)
     }
 
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
-        return symbol.productions
+    visitChoice<P extends Definition>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return Object.values(symbol.productions)
             .map(p => this.get(p, input))
             .reduce(merge, new Set<tokens.TokenType<any>>())
     }
@@ -637,8 +614,8 @@ class FollowSetDeriver implements Visitor<Map<Symbol<any>, TokenTypeSet>, TokenT
         return this.pass(this.get(symbol, input), symbol.symbol, input);
     }
 
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
-        return symbol.productions.reduce((r, p) => this.pass(r, p, input), this.get(symbol, input))
+    visitChoice<P extends Definition>(symbol: Choice<P>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
+        return Object.values(symbol.productions).reduce((r, p) => this.pass(r, p, input), this.get(symbol, input))
     }
 
     visitProduction<D extends Definition>(symbol: Production<D>, input: Map<Symbol<any>, TokenTypeSet>): TokenTypeSet {
@@ -701,9 +678,9 @@ class LL1EligibilityVerifier implements Visitor<string, string[]> {
         return output
     }
 
-    visitChoice<P extends utils.OneOrMore<DiscriminatedSymbol<any, any>>>(symbol: Choice<P>, path: string): string[] {
+    visitChoice<P extends Definition>(symbol: Choice<P>, path: string): string[] {
         const output = []
-        const flatFirstSet = symbol.productions.map(p => this.firstSets.get(p)).flatMap(s => [...this.tokensOf(s)])
+        const flatFirstSet = Object.values(symbol.productions).map(p => this.firstSets.get(p)).flatMap(s => [...this.tokensOf(s)])
         const firstSet = this.firstSets.get(symbol);
         const firstSetSize = firstSet !== undefined ? firstSet.size : 0
         if (flatFirstSet.length > firstSetSize) {
@@ -758,11 +735,9 @@ type Con<T> = {
 }
 
 function listProductions<T>(symbol: Repeatable<T>) {
-    return recursively((self: Repeatable<Con<T>>) => {
-        const list = self.optional()
-        const con = production({ head: symbol, tail: list })
-        return [con, { list, con }]
-    })
+    const con: Repeatable<Con<T>> = production(() => ({ head: symbol, tail: list }))
+    const list = con.optional()
+    return { list, con }
 }
 
 function toList<T>(n: LinkedList<T>): T[] {

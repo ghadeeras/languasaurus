@@ -29,42 +29,46 @@ describe("parsing", () => {
             opAdd: lex.string(rex.charFrom("+-")),
             whiteSpace: lex.string(rex.oneOrMore(rex.charFrom(" \t\n\r"))),
         }
-        
+
+        type Exp = { left: { op: string | null, value: Factor }, right: { op: string, value: Factor }[] }
+        type Factor = { left: Term, right: { op: string, value: Term }[] }
+        type Term = gram.Case<"lit", number> | gram.Case<"fun", FunCall> | gram.Case<"parenthesized", Param>
+        type FunCall = { funName: string, param: Param | null }
+        type Param = { parenOpen: string, arg: Exp, parenClose: string }
+
         const TRM = gram.terminals(tokens)
-        const symbols = gram.recursively(self => {
-            const param = gram.production({
-                parenOpen: TRM.parenOpen.tokenless(),
-                arg: self,
-                parenClose: TRM.parenClose.tokenless()
-            })
-            const funCall = gram.production({
-                funName: TRM.identifier.tokenless(),
-                param: param.optional()
-            })
-            const term = gram.choice(
-                TRM.floatLit.tokenless().as("lit"),
-                funCall.as("fun"),
-                param.as("parenthesized")
-            )
-            const factor = gram.production({
-                left: term,
-                right: gram.production({
-                    op: TRM.opFactor.tokenless(),
-                    value: term
-                }).zeroOrMore()
-            })
-            const exp = gram.production({
-                left: gram.production({
-                    op: TRM.opAdd.tokenless().optional(),
-                    value: factor
-                }),
-                right: gram.production({
-                    op: TRM.opAdd.tokenless(),
-                    value: factor
-                }).zeroOrMore() 
-            })
-            return [exp, { exp, funCall, term, factor, param }] 
+        const exp: gram.Repeatable<Exp> = gram.production(() => ({
+            left: gram.production({
+                op: TRM.opAdd.tokenless().optional(),
+                value: factor
+            }),
+            right: gram.production({
+                op: TRM.opAdd.tokenless(),
+                value: factor
+            }).zeroOrMore() 
+        }))
+        const param = gram.production({
+            parenOpen: TRM.parenOpen.tokenless(),
+            arg: exp,
+            parenClose: TRM.parenClose.tokenless()
         })
+        const funCall = gram.production({
+            funName: TRM.identifier.tokenless(),
+            param: param.optional()
+        })
+        const term = gram.choice({
+            lit: TRM.floatLit.tokenless(),
+            fun: funCall,
+            parenthesized: param
+        })
+        const factor = gram.production({
+            left: term,
+            right: gram.production({
+                op: TRM.opFactor.tokenless(),
+                value: term
+            }).zeroOrMore()
+        })
+        const symbols =  { exp, funCall, term, factor, param }
 
         const parser = p.recursiveDescentParser(tokens, symbols.exp)
 
