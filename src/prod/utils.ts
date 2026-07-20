@@ -7,17 +7,6 @@ export type Consumer<T> = (v: T) => void
 export type Producer<T> = Consumer<Consumer<T>>
 export type OneOrMore<T> = [T, ...T[]]
 
-export type KeyOf<D extends object> = D extends Record<infer K, infer _> ? K extends string ? K : never : never
-export type RequiredKeys<T> = {
-    [k in keyof T]: undefined extends T[k] ? never : k
-}[keyof T]
-export type OptionalKeys<T> = Exclude<keyof T, RequiredKeys<T>>
-export type UndefinedToOptional<T> = {
-    [k in RequiredKeys<T>]: T[k]
-} & {
-    [k in OptionalKeys<T>]?: Exclude<T[k], undefined>
-}
-
 export type Pair<K, V> = {
     key: K;
     value: V;

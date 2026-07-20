@@ -2,7 +2,6 @@ import * as gram from "./grammar.js"
 import * as lex from "./scanning.js"
 import * as tokens from "./tokens.js"
 import { TextInputStream } from "./streams.js"
-import { KeyOf } from "./utils.js"
 
 export function recursiveDescentParser<T, D extends lex.TokenDefinitions>(tokenDefinitions: D, start: gram.Symbol<T>, whitespace: Set<tokens.TokenType<any>> | undefined = undefined): (input: TextInputStream) => T {
     const grammar = new gram.Grammar(start)
@@ -206,7 +205,7 @@ export class RecursiveDescentParsingVisitor implements ParsingVisitor {
     visitProduction<D extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Production<D>, input: LookAhead): gram.Structure<D> {
         const result: Partial<gram.Structure<D>> = {}
         for (const k of symbol.order) {
-            const key = k as KeyOf<D>
+            const key = k as keyof D
             const s = symbol.definition[k]
             result[key] = acceptor.accept(s, input)
         }

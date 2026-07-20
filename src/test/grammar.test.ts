@@ -74,7 +74,7 @@ describe("Grammar", () => {
             expect(g).to.satisfy(containmentOf(intLit))
         })
 
-        function containmentOf<T>(symbol: gram.Symbol<any>): (g: gram.Grammar<T>) => boolean {
+        function containmentOf<T>(symbol: gram.Symbol): (g: gram.Grammar<T>) => boolean {
             return g => g.symbols.has(symbol) 
                 && g.isOptional(symbol) !== undefined 
                 && g.firstSetOf(symbol) !== undefined 
@@ -155,15 +155,12 @@ describe("Grammar", () => {
         })
 
         it("works correctly even for indirectly recursive rules", () => {
-            const recursive = gram.recursively(self => {
-                const subR = gram.choice({ num: intLit, rec: self })
-                const r = gram.choice({ id: gram.production({ id: identifier.optional() }), subR })
-                return [r, { r, subR }]
-            })
+            const subR: gram.Repeatable = gram.choice(() => ({ num: intLit, rec: r }))
+            const r = gram.choice({ id: gram.production({ id: identifier.optional() }), subR })
 
-            const g = new gram.Grammar(recursive.r)
+            const g = new gram.Grammar(r)
 
-            expect(g.isOptional(recursive.subR)).to.be.true
+            expect(g.isOptional(subR)).to.be.true
         })
 
     })
@@ -248,15 +245,12 @@ describe("Grammar", () => {
                     | { type: "rec", value: R } 
                   }
 
-            const recursive = gram.recursively((self: gram.Repeatable<R>) => {
-                const subR = gram.choice({ num: intLit, rec: self })
-                const r = gram.choice({ id: identifier, subR })
-                return [r, { r, subR }]
-            })
+            const subR: gram.Repeatable = gram.choice(() => ({ num: intLit, rec: r }))
+            const r = gram.choice({ id: identifier, subR })
 
-            const g = new gram.Grammar(recursive.r)
+            const g = new gram.Grammar(r)
 
-            expect(g.firstSetOf(recursive.subR)).satisfies(aSetEqualTo(new Set([
+            expect(g.firstSetOf(subR)).satisfies(aSetEqualTo(new Set([
                 ...g.firstSetOf(intLit),
                 ...g.firstSetOf(identifier),
             ])))
@@ -323,63 +317,60 @@ describe("Grammar", () => {
 
     describe("random", () => {
 
-        const productions = gram.recursively(self => {
-            const funCall = gram.production({
-                funName: identifier.optional(),
-                parenOpen,
-                arg: self,
-                parenClose
+        const exp: gram.Repeatable = gram.production(() => ({
+            left: gram.production({
+                op: opAdd.optional(),
+                value: factor
             }).mapped(
-                ({funName, arg}) => funName !== null ? ({ funName, arg}) : arg,
-                n => 
-                      "funName" in n && "arg" in n ? ({ parenOpen: "(", parenClose: ")", ...n }) 
-                    : ({ funName: null, parenOpen: "(", arg: n, parenClose: ")"})
-            )
-            const term = gram.choice({
-                lit: floatLit,
-                id: identifier,
-                fun: funCall
+                n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
+                n => n.plus !== undefined ? { op: null, value: n.plus } : { op: "-", value: n.minus}
+            ),
+            right: gram.production({
+                op: opAdd,
+                value: factor
             }).mapped(
-                n => n.value, 
-                n => 
-                      typeof n == "number" ? ({type: "lit", value: n})
-                    : typeof n == "string" ? ({type: "id", value: n})
-                    : ({type: "fun", value: n})
-            )
-            const factor = gram.production({
-                left: term,
-                right: gram.production({
-                    op: opFactor,
-                    value: term
-                }).mapped(
-                    n => n.op === "*" ? { mul: n.value } : { div: n.value }, 
-                    n => n.mul !== undefined ? { op: "*", value: n.mul } : { op: "/", value: n.div}
-                ).zeroOrMore()
+                n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
+                n => n.plus !== undefined ? { op: "+", value: n.plus } : { op: "-", value: n.minus}
+            ).zeroOrMore() 
+        })).mapped(
+            n => onOrMany(n.left , ...n.right), 
+            n => ({ left: n[0], right: n.splice(1) })
+        )
+        const funCall = gram.production({
+            funName: identifier.optional(),
+            parenOpen,
+            arg: exp,
+            parenClose
+        }).mapped(
+            ({funName, arg}) => funName !== null ? ({ funName, arg}) : arg,
+            n => "funName" in n && "arg" in n 
+                ? ({ parenOpen: "(", parenClose: ")", ...n }) 
+                : ({ funName: null, parenOpen: "(", arg: n, parenClose: ")"})
+        )
+        const term = gram.choice({
+            lit: floatLit,
+            id: identifier,
+            fun: funCall
+        }).mapped(
+            n => n.value, 
+            n =>  typeof n == "number" ? ({type: "lit", value: n})
+                : typeof n == "string" ? ({type: "id", value: n})
+                : ({type: "fun", value: n})
+        )
+        const factor = gram.production({
+            left: term,
+            right: gram.production({
+                op: opFactor,
+                value: term
             }).mapped(
-                n => onOrMany({ mul: n.left }, ...n.right), 
-                n => ({ left: n[0].mul, right: n.splice(1) })
-            )
-            const exp = gram.production({
-                left: gram.production({
-                    op: opAdd.optional(),
-                    value: factor
-                }).mapped(
-                    n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
-                    n => n.plus !== undefined ? { op: null, value: n.plus } : { op: "-", value: n.minus}
-                ),
-                right: gram.production({
-                    op: opAdd,
-                    value: factor
-                }).mapped(
-                    n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
-                    n => n.plus !== undefined ? { op: "+", value: n.plus } : { op: "-", value: n.minus}
-                ).zeroOrMore() 
-            }).mapped(
-                n => onOrMany(n.left , ...n.right), 
-                n => ({ left: n[0], right: n.splice(1) })
-            )
-            return [exp, { exp, funCall, term, factor }] 
-        })
+                n => n.op === "*" ? { mul: n.value } : { div: n.value }, 
+                n => n.mul !== undefined ? { op: "*", value: n.mul } : { op: "/", value: n.div}
+            ).zeroOrMore()
+        }).mapped(
+            n => onOrMany({ mul: n.left }, ...n.right), 
+            n => ({ left: n[0].mul, right: n.splice(1) })
+        )
+        const productions = { exp, funCall, term, factor }
 
         it.skip("generates random parse trees", () => {
             const tree = productions.exp.random()
@@ -394,40 +385,39 @@ describe("Grammar", () => {
     describe("ll1EligiblityProblems", () => {
 
         it("returns empty array if no LL(1) ambiguities in grammar", () => {
-            const symbols = gram.recursively(self => {
-                const param = gram.production({
-                    parenOpen,
-                    arg: self,
-                    parenClose
-                })
-                const funCall = gram.production({
-                    funName: identifier,
-                    param: param.optional()
-                })
-                const term = gram.choice({
-                    lit: floatLit,
-                    fun: funCall,
-                    parenthesized: param
-                })
-                const factor = gram.production({
-                    left: term,
-                    right: gram.production({
-                        op: opFactor,
-                        value: term
-                    }).zeroOrMore()
-                })
-                const exp = gram.production({
-                    left: gram.production({
-                        op: opAdd.optional(),
-                        value: factor
-                    }),
-                    right: gram.production({
-                        op: opAdd,
-                        value: factor
-                    }).zeroOrMore() 
-                })
-                return [exp, { exp, funCall, term, factor, param }] 
-            })
+
+        const exp: gram.Repeatable = gram.production(() => ({
+            left: gram.production({
+                op: opAdd.optional(),
+                value: factor
+            }),
+            right: gram.production({
+                op: opAdd,
+                value: factor
+            }).zeroOrMore() 
+        }))
+        const param = gram.production({
+            parenOpen: parenOpen,
+            arg: exp,
+            parenClose: parenClose
+        })
+        const funCall = gram.production({
+            funName: identifier,
+            param: param.optional()
+        })
+        const term = gram.choice({
+            lit: floatLit,
+            fun: funCall,
+            parenthesized: param
+        })
+        const factor = gram.production({
+            left: term,
+            right: gram.production({
+                op: opFactor,
+                value: term
+            }).zeroOrMore()
+        })
+        const symbols =  { exp, funCall, term, factor, param }
             const g = new gram.Grammar(symbols.exp)
             console.log(g.symbols.values())
             const problems = g.ll1EligiblityProblems();
