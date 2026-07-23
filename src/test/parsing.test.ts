@@ -3,10 +3,11 @@ import * as gram from "../prod/grammar.js"
 import * as lex from "../prod/tokens.js"
 import * as rex from "../prod/regex.js"
 import * as stream from "../prod/streams.js"
+import { expect } from "chai"
 
 describe("parsing", () => {
 
-    it.skip("works", () => {
+    it("works", () => {
         const tokens = {
             booleanLit: lex.boolean(),
             intLit: lex.integer(rex.oneOrMore(rex.charIn("0-9"))),
@@ -14,7 +15,7 @@ describe("parsing", () => {
                 rex.zeroOrMore(rex.charIn("0-9")), 
                 rex.char("."), 
                 rex.oneOrMore(rex.charIn("0-9"))
-            )),
+            )).serializedAs(v => v.toFixed(20)),
             identifier: lex.string(rex.oneOrMore(rex.concat(
                 rex.choice(
                     rex.charIn("A-Z")
@@ -70,12 +71,15 @@ describe("parsing", () => {
         })
         const symbols =  { exp, funCall, term, factor, param }
 
-        const parser = p.recursiveDescentParser(tokens, symbols.exp)
+        const errors: string[] = []
+        const parser = p.recursiveDescentParser(tokens, symbols.exp, scanner => new p.DefaultParsingErrorReporter(scanner, errors.push.bind(errors)))
 
         const tree = parser(new stream.TextInputStream("Pascal + Sin(Pi / 3.0) + meow"));
-        console.log(JSON.stringify(tree, null, 2))
-        console.log(...[...symbols.exp.tokens(tree)].map(t => t.lexeme));
+        expect(errors.map(e => e.substring(1, e.indexOf("]")))).to.deep.equal(["1:26", "1:30"])
 
+        const text = [...symbols.exp.tokens(tree)].map(t => t.lexeme).join(" ")
+        const newTree = parser(new stream.TextInputStream(text));
+        expect(newTree).to.deep.equal(tree)
     })
 
 })

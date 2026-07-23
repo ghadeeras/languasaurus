@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import * as utils from "../prod/utils.js";
+import { Expression } from "../prod/utils.js";
 
 describe("utils", () => {
 
@@ -162,6 +163,22 @@ describe("utils", () => {
 
             expect(result).to.deep.equal([1, 2, 3, 4, 5, 6, 7, 8]);
         });
+
+    })
+
+    describe("expression", ()=> {
+        
+        it("works", () => {
+            function fib(n: Expression<number>): Expression<number> {
+                return n.then(v => v < 2 
+                    ? v
+                    : fib(Expression.of(v - 1)).then(v1 => fib(Expression.of(v - 2)).then(v2 => v1 + v2))
+                )
+            }
+            expect(fib(Expression.of(6)).value).to.equal(8)
+            expect(fib(Expression.of(7)).value).to.equal(13)
+            expect(fib(Expression.of(8)).value).to.equal(21)
+        })
 
     })
 

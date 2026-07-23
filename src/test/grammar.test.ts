@@ -419,9 +419,7 @@ describe("Grammar", () => {
         })
         const symbols =  { exp, funCall, term, factor, param }
             const g = new gram.Grammar(symbols.exp)
-            console.log(g.symbols.values())
             const problems = g.ll1EligiblityProblems();
-            console.log(problems)
             expect(problems).to.be.empty
         })
 
@@ -431,7 +429,6 @@ describe("Grammar", () => {
                 required: identifier
             }))
             const problems = g.ll1EligiblityProblems();
-            console.log(problems)
             expect(problems).to.be.not.empty
         })
 
@@ -445,7 +442,6 @@ describe("Grammar", () => {
                 second: identifier
             }))
             const problems = g.ll1EligiblityProblems();
-            console.log(problems)
             expect(problems).to.be.not.empty
         })
 

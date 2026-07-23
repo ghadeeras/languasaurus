@@ -112,13 +112,13 @@ export function terminal<T>(tokenType: tokens.TokenType<T>): Terminal<T> {
 
 export function choice<D extends Definition>(productions: D | (() => D)): Repeatable<Cases<D>> {
     return typeof productions === "function" 
-        ? new LazyImpl(() => new ChoiceImpl(productions)) 
+        ? new RecursiveImpl(() => new ChoiceImpl(productions)) 
         : new ChoiceImpl(() => productions)
 }
 
 export function production<D extends Definition>(definition: D | (() => D), order: (keyof D)[] | undefined = undefined): Repeatable<Structure<D>> {
     return typeof definition === "function" 
-        ? new LazyImpl(() => new ProductionImpl(definition, order)) 
+        ? new RecursiveImpl(() => new ProductionImpl(definition, order)) 
         : new ProductionImpl(() => definition, order)
 }
 
@@ -130,7 +130,7 @@ export interface Symbol<T = any> {
 
     random(): T
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth?: number): utils.SimplePromise<T>
+    asRandomExpression(depth?: number): utils.Expression<T>
 
     tokens(value: T): Generator<tokens.Token<any>>
 
@@ -144,7 +144,7 @@ export interface NonRepeatable<T = any> extends Symbol<T> {
 
 export interface Repeatable<T = any> extends Symbol<T> {
 
-    optional(): Optional<T>
+    optional(nestingResistance?: number): Optional<T>
     zeroOrMore(): NonRepeatable<T[]>
     oneOrMore(): NonRepeatable<[T, ...T[]]>
 
@@ -179,7 +179,7 @@ export interface Production<D extends Definition> extends Repeatable<Structure<D
     
 }
 
-export interface Lazy<T> extends Repeatable<T> {
+export interface Recursive<T> extends Repeatable<T> {
 
     readonly symbol: Symbol<T>
 
@@ -197,16 +197,18 @@ export interface MappedRepeatable<S, T> extends MappedSymbol<S, T>, Repeatable<T
 
 abstract class SymbolImpl<T> implements Symbol<T> {
 
+    private randomExpression = new utils.Lazy(() => this.asRandomExpression())
+
     abstract size: number;
 
     abstract accept<I, O>(visitor: Visitor<I, O>, input: I): O
 
-    abstract asyncRandom(evaluator: utils.LazyEvaluator, depth?: number): utils.SimplePromise<T>;
+    abstract asRandomExpression(depth?: number): utils.Expression<T>;
 
     abstract tokens(value: T): Generator<tokens.Token<any>>
 
     random(): T {
-        return utils.evaluate(evaluator => this.asyncRandom(evaluator, 0))
+        return this.randomExpression.value.value
     }
     
 }
@@ -221,16 +223,16 @@ abstract class NonRepeatableImpl<T> extends SymbolImpl<T> implements NonRepeatab
 
 abstract class RepeatableImpl<T> extends SymbolImpl<T> implements Repeatable<T> {
 
-    optional(): Optional<T> {
-        return new OptionalImpl(this)
+    optional(nestingResistance: number = 0.125): Optional<T> {
+        return new OptionalImpl(this, nestingResistance)
     }
 
-    zeroOrMore(): NonRepeatable<T[]> {
-        return zeroOrMore(this)
+    zeroOrMore(nestingResistance: number = 0.125): NonRepeatable<T[]> {
+        return zeroOrMore(this, nestingResistance)
     }
 
-    oneOrMore(): NonRepeatable<[T, ...T[]]> {
-        return oneOrMore(this)
+    oneOrMore(nestingResistance: number = 0.125): NonRepeatable<[T, ...T[]]> {
+        return oneOrMore(this, nestingResistance)
     }
 
     mapped<R>(toMapper: (v: T) => R, fromMapper: (v: R) => T): Repeatable<R> {
@@ -243,7 +245,7 @@ class OptionalImpl<T> extends NonRepeatableImpl<T | null> implements Optional<T>
 
     readonly size: number = this.symbol.size + 1
     
-    constructor(readonly symbol: Repeatable<T>) {
+    constructor(readonly symbol: Repeatable<T>, private nestingResistance: number) {
         super()
     }
     
@@ -251,12 +253,12 @@ class OptionalImpl<T> extends NonRepeatableImpl<T | null> implements Optional<T>
         return visitor.visitOptional(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T | null> {
-        const dice = Math.random() * this.size * (2 ** (-depth / 256));
-        return (dice > 1
-            ? this.symbol.asyncRandom(evaluator, depth)
-            : evaluator(() => null)
-        ) as utils.SimplePromise<T | null>
+    asRandomExpression(depth: number = 0): utils.Expression<T | null> {
+        const dice = Math.random() * this.size;
+        return (dice < this.symbol.size * (2 ** (-depth * this.nestingResistance))
+            ? this.symbol.asRandomExpression(depth)
+            : utils.Expression.of(null)
+        )
     }
 
     *tokens(value: T | null): Generator<tokens.Token<any>> {
@@ -281,8 +283,8 @@ class TerminalImpl<T> extends RepeatableImpl<tokens.Token<T>> implements Termina
         return visitor.visitTerminal(this, input)
     }
     
-    asyncRandom(evaluator: utils.LazyEvaluator): utils.SimplePromise<tokens.Token<T>> {
-        return evaluator(() => this.token(this.tokenType.pattern.randomString(0.125)))
+    asRandomExpression(): utils.Expression<tokens.Token<T>> {
+        return utils.Expression.of(this.token(this.tokenType.pattern.randomString(0.125)))
     }
 
     *tokens(value: tokens.Token<T>): Generator<tokens.Token<any>> {
@@ -304,7 +306,7 @@ class TerminalImpl<T> extends RepeatableImpl<tokens.Token<T>> implements Termina
 
 class ChoiceImpl<P extends Definition> extends RepeatableImpl<Cases<P>> implements Choice<P> {
 
-    private _productions = new utils.LazyExpression(this.productionsSupplier)
+    private _productions = new utils.Lazy(this.productionsSupplier)
 
     constructor(private productionsSupplier: () => P) {
         super()
@@ -322,14 +324,14 @@ class ChoiceImpl<P extends Definition> extends RepeatableImpl<Cases<P>> implemen
         return visitor.visitChoice(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Cases<P>> {
+    asRandomExpression(depth: number = 0): utils.Expression<Cases<P>> {
         let dice = utils.randomInt(this.size)
         let i = 0
         const productions = Object.entries(this.productions);
         while (dice >= productions[i][1].size) {
             dice -= productions[i++][1].size
         }
-        return productions[i][1].asyncRandom(evaluator, depth)
+        return productions[i][1].asRandomExpression(depth)
             .then(value => ({ type: productions[i][0], value }) as Cases<P>)
     }
 
@@ -347,8 +349,8 @@ class ChoiceImpl<P extends Definition> extends RepeatableImpl<Cases<P>> implemen
 
 class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> implements Production<D> {
 
-    private _definition = new utils.LazyExpression(this.definitionSupplier)
-    private _order = new utils.LazyExpression(() => this.customOrder !== undefined ? this.customOrder : Object.keys(this.definition) as (keyof D)[])
+    private _definition = new utils.Lazy(this.definitionSupplier)
+    private _order = new utils.Lazy(() => this.customOrder !== undefined ? this.customOrder : Object.keys(this.definition) as (keyof D)[])
     
     constructor(private definitionSupplier: () => D, private customOrder: (keyof D)[] | undefined = undefined) {
         super()
@@ -370,15 +372,15 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
         return visitor.visitProduction(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<Structure<D>> {
-        let resultPromise = evaluator<Partial<Structure<D>>>(() => ({}))
+    asRandomExpression(depth: number = 0): utils.Expression<Structure<D>> {
+        let resultPromise = utils.Expression.of<Partial<Structure<D>>>({})
         for (const key of this.order) {
             resultPromise = resultPromise.then(result => this.definition[key]
-                .asyncRandom(evaluator, depth + 1)
+                .asRandomExpression(depth + 1)
                 .then(setInto(result, key))
             )
         }
-        return resultPromise as utils.SimplePromise<Structure<D>>
+        return resultPromise as utils.Expression<Structure<D>>
     }
 
     *tokens(value: Structure<D>): Generator<tokens.Token<any>> {
@@ -393,7 +395,7 @@ class ProductionImpl<D extends Definition> extends RepeatableImpl<Structure<D>> 
 
 }
 
-class LazyImpl<T> extends RepeatableImpl<T> implements Lazy<T> {
+class RecursiveImpl<T> extends RepeatableImpl<T> implements Recursive<T> {
 
     readonly symbol: Repeatable<T>
     readonly size: number = 1
@@ -404,11 +406,11 @@ class LazyImpl<T> extends RepeatableImpl<T> implements Lazy<T> {
     }
 
     accept<I, O>(visitor: Visitor<I, O>, input: I): O {
-        return visitor.visitLazy(this, input)
+        return visitor.visitRecursive(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
-        return this.symbol.asyncRandom(evaluator, depth)
+    asRandomExpression(depth: number = 0): utils.Expression<T> {
+        return this.symbol.asRandomExpression(depth)
     }
     
     tokens(value: T): Generator<tokens.Token<any>> {
@@ -429,8 +431,8 @@ class MappedNonRepeatableImpl<S, T> extends NonRepeatableImpl<T> implements Mapp
         return visitor.visitMappedNonRepeatable(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number = 0): utils.SimplePromise<T> {
-        return this.symbol.asyncRandom(evaluator, depth).then(this.toMapper)
+    asRandomExpression(depth: number = 0): utils.Expression<T> {
+        return this.symbol.asRandomExpression(depth).then(this.toMapper)
     }
 
     tokens(value: T): Generator<tokens.Token<any>> {
@@ -451,8 +453,8 @@ class MappedRepeatableImpl<S, T> extends RepeatableImpl<T> implements MappedRepe
         return visitor.visitMappedRepeatable(this, input)
     }
 
-    asyncRandom(evaluator: utils.LazyEvaluator, depth: number): utils.SimplePromise<T> {
-        return this.symbol.asyncRandom(evaluator, depth).then(this.toMapper)
+    asRandomExpression(depth: number): utils.Expression<T> {
+        return this.symbol.asRandomExpression(depth).then(this.toMapper)
     }
 
     tokens(value: T): Generator<tokens.Token<any>> {
@@ -466,7 +468,7 @@ export interface Visitor<I, O> {
     visitOptional<T>(symbol: Optional<T>, input: I): O;
     visitChoice<P extends Definition>(symbol: Choice<P>, input: I): O;
     visitProduction<D extends Definition>(symbol: Production<D>, input: I): O;
-    visitLazy<S>(symbol: Lazy<S>, input: I): O;
+    visitRecursive<S>(symbol: Recursive<S>, input: I): O;
     visitMappedNonRepeatable<S, T>(symbol: MappedNonRepeatable<S, T>, input: I): O;
     visitMappedRepeatable<S, T>(symbol: MappedRepeatable<S, T>, input: I): O;
 }
@@ -491,7 +493,7 @@ class SymbolsCollector implements Visitor<string, Map<Symbol, string>> {
         return this.addChilds(Object.entries(symbol.definition), symbol, path)
     }
 
-    visitLazy<S>(symbol: Lazy<S>, path: string): Map<Symbol, string> {
+    visitRecursive<S>(symbol: Recursive<S>, path: string): Map<Symbol, string> {
         return this.map.has(symbol) ? this.map : this.addChilds([["*", symbol.symbol]], symbol, path)
     }
 
@@ -529,7 +531,7 @@ class OptionalityDeriver implements Visitor<Map<Symbol, boolean>, boolean> {
         return symbol.order.reduce((a, k) => this.get(symbol.definition[k], input) && a, true)
     }
     
-    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol, boolean>): boolean {
+    visitRecursive<S>(symbol: Recursive<S>, input: Map<Symbol, boolean>): boolean {
         return this.get(symbol.symbol, input)
     }
 
@@ -574,7 +576,7 @@ class FirstSetDeriver implements Visitor<Map<Symbol, TokenTypeSet>, TokenTypeSet
             .reduce((set, [s, _]) => merge(set, s), new Set<tokens.TokenType<any>>())
     }
 
-    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol, TokenTypeSet>): TokenTypeSet {
+    visitRecursive<S>(symbol: Recursive<S>, input: Map<Symbol, TokenTypeSet>): TokenTypeSet {
         return this.get(symbol.symbol, input)
     }
 
@@ -622,7 +624,7 @@ class FollowSetDeriver implements Visitor<Map<Symbol, TokenTypeSet>, TokenTypeSe
         return result
     }
 
-    visitLazy<S>(symbol: Lazy<S>, input: Map<Symbol, TokenTypeSet>): TokenTypeSet {
+    visitRecursive<S>(symbol: Recursive<S>, input: Map<Symbol, TokenTypeSet>): TokenTypeSet {
         return this.pass(this.get(symbol, input), symbol.symbol, input);
     }
 
@@ -684,7 +686,7 @@ class LL1EligibilityVerifier implements Visitor<string, string[]> {
         return []
     }
 
-    visitLazy(): string[] {
+    visitRecursive(): string[] {
         return []
     }
 
@@ -711,12 +713,12 @@ class LL1EligibilityVerifier implements Visitor<string, string[]> {
 
 }
 
-function zeroOrMore<T>(symbol: Repeatable<T>): NonRepeatable<T[]> {
-    return listProductions(symbol).list.mapped<T[]>(n => toList(n), l => toLinkedList(l))
+function zeroOrMore<T>(symbol: Repeatable<T>, nestingResistance: number): NonRepeatable<T[]> {
+    return listProductions(symbol, nestingResistance).list.mapped<T[]>(n => toList(n), l => toLinkedList(l))
 }
 
-function oneOrMore<T>(symbol: Repeatable<T>): NonRepeatable<[T, ...T[]]> {
-    return listProductions(symbol).con.mapped<[T, ...T[]]>(n => toNonEmptyList(n), l => toCon(l))
+function oneOrMore<T>(symbol: Repeatable<T>, nestingResistance: number): NonRepeatable<[T, ...T[]]> {
+    return listProductions(symbol, nestingResistance).con.mapped<[T, ...T[]]>(n => toNonEmptyList(n), l => toCon(l))
 }
 
 type LinkedList<T> = Con<T> | null
@@ -725,9 +727,9 @@ type Con<T> = {
     tail: LinkedList<T>
 }
 
-function listProductions<T>(symbol: Repeatable<T>) {
+function listProductions<T>(symbol: Repeatable<T>, nestingResistance: number) {
     const con: Repeatable<Con<T>> = production(() => ({ head: symbol, tail: list }))
-    const list = con.optional()
+    const list = con.optional(nestingResistance)
     return { list, con }
 }
 

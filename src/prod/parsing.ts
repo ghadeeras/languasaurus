@@ -2,8 +2,14 @@ import * as gram from "./grammar.js"
 import * as lex from "./scanning.js"
 import * as tokens from "./tokens.js"
 import { TextInputStream } from "./streams.js"
+import { Consumer } from "./utils.js"
 
-export function recursiveDescentParser<T, D extends lex.TokenDefinitions>(tokenDefinitions: D, start: gram.Symbol<T>, whitespace: Set<tokens.TokenType<any>> | undefined = undefined): (input: TextInputStream) => T {
+export function recursiveDescentParser<T, D extends lex.TokenDefinitions>(
+    tokenDefinitions: D, 
+    start: gram.Symbol<T>, 
+    errorReporterFactory: (scanner: lex.Scanner<any>) => ParsingErrorReporter = scanner => new DefaultParsingErrorReporter(scanner),
+    whitespace: Set<tokens.TokenType<any>> | undefined = undefined,
+): (input: TextInputStream) => T {
     const grammar = new gram.Grammar(start)
     const problems = grammar.ll1EligiblityProblems()
     if (problems.length > 0) {
@@ -11,7 +17,7 @@ export function recursiveDescentParser<T, D extends lex.TokenDefinitions>(tokenD
     }
     const ws = whitespace ?? inferWhiteSpaceTokens<T, D>(tokenDefinitions, grammar)
     const scanner = new lex.Scanner(tokenDefinitions)
-    const errorReporter = new DefaultParsingErrorReporter(scanner)
+    const errorReporter = errorReporterFactory(scanner)
     const visitor = new RecursiveDescentParsing(grammar, errorReporter)
     return stream => {
         const input = new LookAhead(scanner.iterator(stream), ws, errorReporter.invalidToken.bind(errorReporter))
@@ -29,10 +35,10 @@ export interface ParsingErrorReporter {
 
 export class DefaultParsingErrorReporter implements ParsingErrorReporter {
 
-    constructor(private scanner: lex.Scanner<any>) {}
+    constructor(private scanner: lex.Scanner<any>, private errorConsumer: Consumer<string> = error => console.error(error)) {}
 
     invalidToken(errorToken: tokens.Token<any>): void {
-        console.error(`[${errorToken.position.line}:${errorToken.position.column}] Invalid token: '${errorToken.lexeme}'`)
+        this.errorConsumer(`[${errorToken.position.line}:${errorToken.position.column}] Invalid token: '${errorToken.lexeme}'`)
     }
 
     unexpectedToken(errorToken: tokens.Token<any>, ...expected: Set<tokens.TokenType<any>>[]): void {
@@ -41,7 +47,7 @@ export class DefaultParsingErrorReporter implements ParsingErrorReporter {
             .map(t => t.random(errorToken.position))
             .map(t => t.tokenType !== tokens.eof ? `${this.name(t)} (e.g. '${t.lexeme}')` : this.name(t))
         const errorTokenTypeName = this.name(errorToken)
-        console.error(`[${errorToken.position.line}:${errorToken.position.column}] Unexpected ${errorTokenTypeName} token: '${errorToken.lexeme}'. Expected one of:\n - ${expectedTokens.join("\n - ")}`)
+        this.errorConsumer(`[${errorToken.position.line}:${errorToken.position.column}] Unexpected ${errorTokenTypeName} token: '${errorToken.lexeme}'. Expected one of:\n - ${expectedTokens.join("\n - ")}`)
     }
 
     private name(errorToken: tokens.Token<any>) {
@@ -105,7 +111,7 @@ export interface ParsingVisitor {
     visitOptional<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Optional<T>, input: LookAhead): T | null;
     visitChoice<P extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Choice<P>, input: LookAhead): gram.Cases<P>;
     visitProduction<D extends gram.Definition>(acceptor: ParsingVisitorAcceptor, symbol: gram.Production<D>, input: LookAhead): gram.Structure<D>;
-    visitLazy<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Lazy<T>, input: LookAhead): T;
+    visitLazy<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Recursive<T>, input: LookAhead): T;
     visitMappedNonRepeatable<S, T>(acceptor: ParsingVisitorAcceptor, symbol: gram.MappedNonRepeatable<S, T>, input: LookAhead): T;
     visitMappedRepeatable<S, T>(acceptor: ParsingVisitorAcceptor, symbol: gram.MappedRepeatable<S, T>, input: LookAhead): T;
 }
@@ -142,7 +148,7 @@ export class RecursiveDescentParsing implements gram.Visitor<LookAhead, any>, Pa
         return this.visitor.visitProduction(this, symbol, input)
     }
 
-    visitLazy<S>(symbol: gram.Lazy<S>, input: LookAhead) {
+    visitRecursive<S>(symbol: gram.Recursive<S>, input: LookAhead) {
         return this.visitor.visitLazy(this, symbol, input)
     }
 
@@ -212,7 +218,7 @@ export class RecursiveDescentParsingVisitor implements ParsingVisitor {
         return result as gram.Structure<D>
     }
 
-    visitLazy<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Lazy<T>, input: LookAhead): T {
+    visitLazy<T>(acceptor: ParsingVisitorAcceptor, symbol: gram.Recursive<T>, input: LookAhead): T {
         return acceptor.accept(symbol.symbol, input)
     }
 

@@ -3,9 +3,14 @@ export type Comparator<T> = (v1: T, v2: T) => number;
 export type Reducer<A, B> = (a: A, b: B) => A;
 export type Getter<A, B> = (a: A) => B;
 export type Mapper<A, B> = (a: A, i: number) => B;
+export type Runnable = () => void
 export type Consumer<T> = (v: T) => void
 export type Producer<T> = Consumer<Consumer<T>>
 export type OneOrMore<T> = [T, ...T[]]
+
+export type KeyOf<T extends object> = {
+    [k in keyof T]: k extends string ? k : never
+}[keyof T]
 
 export type Pair<K, V> = {
     key: K;
@@ -120,90 +125,55 @@ export function bug<T>(): Exclude<T, undefined | null> {
     throw new Error("Should never happen!!!")
 }
 
-export type Expression<T> = () => T 
-export type LazyEvaluator = <T>(expression: Expression<T>) => SimplePromise<T>  
-export type AsyncExpression<T> = (evaluator: LazyEvaluator) => SimplePromise<T> 
+export type ValueProducer<T> = (valueConsumer: Consumer<T>, defer: Consumer<Runnable>) => void
+export class Expression<T> {
 
-export function evaluate<T>(asyncExpression: AsyncExpression<T>): T {
-    const evaluator = new LazyEvaluatorImpl()
-    const promise = asyncExpression(expression => evaluator.evaluate(expression))
-    return evaluator.await(promise)
-}
-
-class LazyEvaluatorImpl {
-
-    private resolutions: (() => void)[] = []
-
-    evaluate<T>(expression: () => T): SimplePromise<T> {
-        return new SimplePromise(
-            resolution => this.resolutions.push(resolution), 
-            consumer => this.resolutions.push(() => consumer(expression()))
-        )
+    private constructor(private producer: ValueProducer<T>) {
     }
 
-    await<T>(promise: SimplePromise<T>): T {
-        const result: T[] = []
-        promise.then(value => result.push(value))
-        while (this.resolutions.length > 0 && result.length == 0) {
-            const resolution = this.resolutions.shift()
-            if (resolution !== undefined) {
-                resolution()
-            }
-        }
-        if (result.length === 0) {
-            throw new Error("Could not resolve promise!!!")
-        }
-        return result[0]
+    static of<T>(value: T): Expression<T> {
+        return new Expression((consumer, _) => consumer(value))
     }
 
-}
-
-export class SimplePromise<T> {
-
-    private result: T[] = []
-    private consumers: Consumer<T>[] = []
-
-    constructor(private defer: Consumer<() => void>, producer: Producer<T>) {
-        producer(value => this.resolve(value))
+    static from<T>(supplier: () => T | Expression<T>): Expression<T> {
+        return new Expression((consumer, deferrer) => deferrer(() => {
+            Expression.consume(supplier(), consumer, deferrer);
+        }))
     }
 
-    private resolve(value: T) {
-        if (this.result.length > 0) {
-            throw new Error("Only one resolution is expected!")
-        }
-        this.result.push(value);
-        while (this.consumers.length > 0) {
-            const consumer = this.consumers.shift();
-            if (consumer !== undefined) {
-                this.defer(() => consumer(value));
-            }
-        }
+    then<R>(mapper: (value: T) => R | Expression<R>): Expression<R> {
+        return new Expression((consumer, deferrer) => this.producer(value => deferrer(() => {
+            Expression.consume(mapper(value), consumer, deferrer);
+        }), deferrer))
     }
 
-    private attach(consumer: Consumer<T>) {
-        if (this.result.length > 0) {
-            this.defer(() => consumer(this.result[0]))
+    private static consume<T>(result: T | Expression<T>, consumer: Consumer<T>, deferrer: Consumer<Runnable>) {
+        if (result instanceof Expression) {
+            result.producer(consumer, deferrer);
         } else {
-            this.consumers.push(consumer)
+            consumer(result);
         }
     }
 
-    then<R>(mapper: (value: T) => R | SimplePromise<R>): SimplePromise<R> {
-        return new SimplePromise(this.defer, consumer => {
-            this.attach(value => {
-                const result = mapper(value);
-                if (result instanceof SimplePromise) {
-                    result.attach(consumer)
-                } else {
-                    consumer(result)
-                }
-            })
-        })
+    get value(): T {
+        const value: T[] = []
+        const valueConsumer: Consumer<T> = value.push.bind(value)
+
+        const deferredSteps: Runnable[] = []
+        const deferrer: Consumer<Runnable> = deferredSteps.push.bind(deferredSteps)
+
+        this.producer(valueConsumer, deferrer)
+        while (deferredSteps.length > 0) {
+            const step = deferredSteps.shift() ?? bug()
+            step();
+        }
+
+        return value[0]
     }
 
 }
 
-export class LazyExpression<T> {
+export class Lazy<T> {
 
     private _value: T | null = null;
 

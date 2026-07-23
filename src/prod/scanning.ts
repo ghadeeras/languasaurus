@@ -8,7 +8,7 @@ export type TokenDefinitions = Record<string, tokens.TokenType<any>> & { EOF?: n
 export class Scanner<D extends TokenDefinitions> {
 
     private readonly tokenTypes: tokens.TokenType<any>[] = []
-    private readonly tokenTypesMap: Map<tokens.TokenType<any>, keyof D | "ERROR" | "EOF"> = new Map()
+    private readonly tokenTypesMap: Map<tokens.TokenType<any>, utils.KeyOf<D> | "ERROR" | "EOF"> = new Map()
         .set(tokens.error, "ERROR")
         .set(tokens.eof, "EOF")
     private readonly automaton: automaton.Automaton<tokens.TokenType<any>>
@@ -45,7 +45,7 @@ export class Scanner<D extends TokenDefinitions> {
         return this.tokenDefinitions[name]
     }
 
-    tokenTypeName<T>(tokenType: tokens.TokenType<T>): keyof D | "ERROR" | "EOF" {
+    tokenTypeName<T>(tokenType: tokens.TokenType<T>): utils.KeyOf<D> | "ERROR" | "EOF" {
         return this.tokenTypesMap.get(tokenType) ?? utils.bug()
     }
 
