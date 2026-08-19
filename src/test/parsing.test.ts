@@ -31,21 +31,21 @@ describe("parsing", () => {
             whiteSpace: lex.string(rex.oneOrMore(rex.charFrom(" \t\n\r"))),
         }
 
-        type Exp = { left: { op: string | null, value: Factor }, right: { op: string, value: Factor }[] }
-        type Factor = { left: Term, right: { op: string, value: Term }[] }
-        type Term = gram.Case<"lit", number> | gram.Case<"fun", FunCall> | gram.Case<"parenthesized", Param>
+        type Exp = { left: { sign: string | null, value: Term }, right: { op: string, value: Term }[] }
+        type Term = { left: Factor, right: { op: string, value: Factor }[] }
+        type Factor = gram.Case<"lit", number> | gram.Case<"fun", FunCall> | gram.Case<"parenthesized", Param>
         type FunCall = { funName: string, param: Param | null }
         type Param = { parenOpen: string, arg: Exp, parenClose: string }
 
         const TRM = gram.terminals(tokens)
         const exp: gram.Repeatable<Exp> = gram.production(() => ({
             left: gram.production({
-                op: TRM.opAdd.tokenless().optional(),
-                value: factor
+                sign: TRM.opAdd.tokenless().optional(),
+                value: term
             }),
             right: gram.production({
                 op: TRM.opAdd.tokenless(),
-                value: factor
+                value: term
             }).zeroOrMore() 
         }))
         const param = gram.production({
@@ -57,19 +57,19 @@ describe("parsing", () => {
             funName: TRM.identifier.tokenless(),
             param: param.optional()
         })
-        const term = gram.choice({
+        const factor = gram.choice({
             lit: TRM.floatLit.tokenless(),
             fun: funCall,
             parenthesized: param
         })
-        const factor = gram.production({
-            left: term,
+        const term = gram.production({
+            left: factor,
             right: gram.production({
                 op: TRM.opFactor.tokenless(),
-                value: term
+                value: factor
             }).zeroOrMore()
         })
-        const symbols =  { exp, funCall, term, factor, param }
+        const symbols =  { exp, funCall, factor, term, param }
 
         const errors: string[] = []
         const parser = p.recursiveDescentParser(tokens, symbols.exp, scanner => new p.DefaultParsingErrorReporter(scanner, errors.push.bind(errors)))

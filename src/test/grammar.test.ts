@@ -319,15 +319,15 @@ describe("Grammar", () => {
 
         const exp: gram.Repeatable = gram.production(() => ({
             left: gram.production({
-                op: opAdd.optional(),
-                value: factor
+                sign: opAdd.optional(),
+                value: term
             }).mapped(
-                n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
-                n => n.plus !== undefined ? { op: null, value: n.plus } : { op: "-", value: n.minus}
+                n => n.sign === "-" ? { minus: n.value } : { plus: n.value }, 
+                n => n.plus !== undefined ? { sign: null, value: n.plus } : { sign: "-", value: n.minus}
             ),
             right: gram.production({
                 op: opAdd,
-                value: factor
+                value: term
             }).mapped(
                 n => n.op === "-" ? { minus: n.value } : { plus: n.value }, 
                 n => n.plus !== undefined ? { op: "+", value: n.plus } : { op: "-", value: n.minus}
@@ -347,7 +347,7 @@ describe("Grammar", () => {
                 ? ({ parenOpen: "(", parenClose: ")", ...n }) 
                 : ({ funName: null, parenOpen: "(", arg: n, parenClose: ")"})
         )
-        const term = gram.choice({
+        const factor = gram.choice({
             lit: floatLit,
             id: identifier,
             fun: funCall
@@ -357,11 +357,11 @@ describe("Grammar", () => {
                 : typeof n == "string" ? ({type: "id", value: n})
                 : ({type: "fun", value: n})
         )
-        const factor = gram.production({
-            left: term,
+        const term = gram.production({
+            left: factor,
             right: gram.production({
                 op: opFactor,
-                value: term
+                value: factor
             }).mapped(
                 n => n.op === "*" ? { mul: n.value } : { div: n.value }, 
                 n => n.mul !== undefined ? { op: "*", value: n.mul } : { op: "/", value: n.div}
@@ -370,7 +370,7 @@ describe("Grammar", () => {
             n => onOrMany({ mul: n.left }, ...n.right), 
             n => ({ left: n[0].mul, right: n.splice(1) })
         )
-        const productions = { exp, funCall, term, factor }
+        const productions = { exp, funCall, factor, term }
 
         it.skip("generates random parse trees", () => {
             const tree = productions.exp.random()
@@ -388,12 +388,12 @@ describe("Grammar", () => {
 
         const exp: gram.Repeatable = gram.production(() => ({
             left: gram.production({
-                op: opAdd.optional(),
-                value: factor
+                sign: opAdd.optional(),
+                value: term
             }),
             right: gram.production({
                 op: opAdd,
-                value: factor
+                value: term
             }).zeroOrMore() 
         }))
         const param = gram.production({
@@ -405,19 +405,19 @@ describe("Grammar", () => {
             funName: identifier,
             param: param.optional()
         })
-        const term = gram.choice({
+        const factor = gram.choice({
             lit: floatLit,
             fun: funCall,
             parenthesized: param
         })
-        const factor = gram.production({
-            left: term,
+        const term = gram.production({
+            left: factor,
             right: gram.production({
                 op: opFactor,
-                value: term
+                value: factor
             }).zeroOrMore()
         })
-        const symbols =  { exp, funCall, term, factor, param }
+        const symbols =  { exp, funCall, factor, term, param }
             const g = new gram.Grammar(symbols.exp)
             const problems = g.ll1EligiblityProblems();
             expect(problems).to.be.empty
