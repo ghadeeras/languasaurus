@@ -13,7 +13,9 @@ export interface TokenType<T> {
 
     parsedAs(parser: (lexeme: string) => T): TokenType<T>
 
-    serializedAs(serializer: (value: T) => string): TokenType<T>
+    stringifiedAs(serializer: (value: T) => string): TokenType<T>
+
+    map<R>(to: (value: T) => R, from: (value: R) => T): TokenType<R>
 
     random(position: streams.StreamPosition): Token<T>
 
@@ -26,7 +28,7 @@ class TokenTypeImpl<T> implements TokenType<T> {
     constructor(
         readonly pattern: regex.RegEx,
         private readonly parser: (lexeme: string) => T,
-        private readonly serializer: (value: T) => string,
+        private readonly stringifier: (value: T) => string,
     ) {
         if (pattern.automaton.isOptional) {
             throw new Error("Token types cannot have patterns that match empty strings")
@@ -38,7 +40,7 @@ class TokenTypeImpl<T> implements TokenType<T> {
     }
 
     stringify(value: T): string {
-        return this.serializer(value)
+        return this.stringifier(value)
     }
 
     token(lexeme: string, position: streams.StreamPosition): Token<T> {
@@ -46,11 +48,15 @@ class TokenTypeImpl<T> implements TokenType<T> {
     }
 
     parsedAs(parser: (lexeme: string) => T): TokenType<T> {
-        return new TokenTypeImpl(this.pattern, parser, this.serializer)
+        return new TokenTypeImpl(this.pattern, parser, this.stringifier)
     }
 
-    serializedAs(serializer: (value: T) => string): TokenType<T> {
+    stringifiedAs(serializer: (value: T) => string): TokenType<T> {
         return new TokenTypeImpl(this.pattern, this.parser, serializer)
+    }
+
+    map<R>(to: (value: T) => R, from: (value: R) => T): TokenType<R> {
+        return new TokenTypeImpl(this.pattern, s => to(this.parse(s)), v => this.stringify(from(v)))
     }
 
     random(position: streams.StreamPosition): Token<T> {
@@ -81,7 +87,7 @@ export function integer(pattern: regex.RegEx): TokenType<number> {
     return new TokenTypeImpl(pattern, s => Number.parseInt(s), n => n.toFixed(0))
 }
 
-export function boolean(t: string= "true", f: string = "false"): TokenType<boolean> {
+export function boolean(t: string = "true", f: string = "false"): TokenType<boolean> {
     return new TokenTypeImpl(regex.word(t).or(regex.word(f)), s => s === t, b => b ? t : f)
 }
 
@@ -89,12 +95,27 @@ export function keyword<T extends string>(word: T) {
     return new TokenTypeImpl(regex.word(word), _ => word, _ => word)
 }
 
-export function op(op: string) {
+export function keywords<T extends string>(firstWord: T, ...otherWords: T[]) {
+    return new TokenTypeImpl(regex.choice(
+        regex.word(firstWord), 
+        ...otherWords.map(w => regex.word(w))
+    ), w => w as T, w => w)
+}
+
+export function op<T extends string>(op: T) {
     return keyword(op)
 }
 
-export function delimiter(del: string) {
+export function ops<T extends string>(firstOp: T, ...otherOps: T[]) {
+    return keywords(firstOp, ...otherOps)
+}
+
+export function delimiter<T extends string>(del: T) {
     return keyword(del)
+}
+
+export function delimiters<T extends string>(firstDel: T, ...otherDels: T[]) {
+    return keywords(firstDel, ...otherDels)
 }
 
 export class Token<T> {

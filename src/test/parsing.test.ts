@@ -15,7 +15,7 @@ describe("parsing", () => {
                 rex.zeroOrMore(rex.charIn("0-9")), 
                 rex.char("."), 
                 rex.oneOrMore(rex.charIn("0-9"))
-            )).serializedAs(v => v.toFixed(20)),
+            )).stringifiedAs(v => v.toFixed(20)),
             identifier: lex.string(rex.oneOrMore(rex.concat(
                 rex.choice(
                     rex.charIn("A-Z")
@@ -24,48 +24,48 @@ describe("parsing", () => {
                     rex.charIn("a-z")
                 ))
             ))),
-            parenOpen: lex.string(rex.word("(")),
-            parenClose: lex.string(rex.word(")")),
-            opFactor: lex.string(rex.charFrom("*/")),
-            opAdd: lex.string(rex.charFrom("+-")),
+            parenOpen: lex.delimiter("("),
+            parenClose: lex.delimiter(")"),
+            opFactor: lex.ops("*", "/"),
+            opAdd: lex.ops("+", "-"),
             whiteSpace: lex.string(rex.oneOrMore(rex.charFrom(" \t\n\r"))),
         }
 
-        type Exp = { left: { sign: string | null, value: Term }, right: { op: string, value: Term }[] }
-        type Term = { left: Factor, right: { op: string, value: Factor }[] }
+        type Exp = { left: { sign: "+" | "-" | null, value: Term }, right: { op: "+" | "-", value: Term }[] }
+        type Term = { left: Factor, right: { op: "*" | "/", value: Factor }[] }
         type Factor = gram.Case<"lit", number> | gram.Case<"fun", FunCall> | gram.Case<"parenthesized", Param>
         type FunCall = { funName: string, param: Param | null }
-        type Param = { parenOpen: string, arg: Exp, parenClose: string }
+        type Param = { parenOpen: "(", arg: Exp, parenClose: ")" }
 
-        const TRM = gram.terminals(tokens)
+        const TRM = gram.tokenlessTerminals(tokens)
         const exp: gram.Repeatable<Exp> = gram.production(() => ({
             left: gram.production({
-                sign: TRM.opAdd.tokenless().optional(),
+                sign: TRM.opAdd.optional(),
                 value: term
             }),
             right: gram.production({
-                op: TRM.opAdd.tokenless(),
+                op: TRM.opAdd,
                 value: term
             }).zeroOrMore() 
         }))
         const param = gram.production({
-            parenOpen: TRM.parenOpen.tokenless(),
+            parenOpen: TRM.parenOpen,
             arg: exp,
-            parenClose: TRM.parenClose.tokenless()
+            parenClose: TRM.parenClose
         })
         const funCall = gram.production({
-            funName: TRM.identifier.tokenless(),
+            funName: TRM.identifier,
             param: param.optional()
         })
-        const factor = gram.choice({
-            lit: TRM.floatLit.tokenless(),
+        const factor = gram.union({
+            lit: TRM.floatLit,
             fun: funCall,
             parenthesized: param
         })
         const term = gram.production({
             left: factor,
             right: gram.production({
-                op: TRM.opFactor.tokenless(),
+                op: TRM.opFactor,
                 value: factor
             }).zeroOrMore()
         })

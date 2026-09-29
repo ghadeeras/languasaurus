@@ -97,6 +97,9 @@ export type TokenTypeSet = Set<tokens.TokenType<any>>
 export type TerminalDefinitions<D extends TokenDefinitions> = {
     [k in keyof D]: D[k] extends tokens.TokenType<infer T> ? Terminal<T> : never
 };
+export type TokenlessTerminalDefinitions<D extends TokenDefinitions> = {
+    [k in keyof D]: D[k] extends tokens.TokenType<infer T> ? Repeatable<T> : never
+};
 
 export function terminals<D extends TokenDefinitions>(definitions: D): TerminalDefinitions<D> {
     const result: Partial<TerminalDefinitions<any>> = {}
@@ -106,11 +109,19 @@ export function terminals<D extends TokenDefinitions>(definitions: D): TerminalD
     return result as TerminalDefinitions<D>
 }
 
+export function tokenlessTerminals<D extends TokenDefinitions>(definitions: D): TokenlessTerminalDefinitions<D> {
+    const result: Partial<TokenlessTerminalDefinitions<any>> = {}
+    for (const key in definitions) {
+        result[key] = terminal(definitions[key]).tokenless()
+    }
+    return result as TokenlessTerminalDefinitions<D>
+}
+
 export function terminal<T>(tokenType: tokens.TokenType<T>): Terminal<T> {
     return new TerminalImpl(tokenType)
 }
 
-export function choice<D extends Definition>(productions: D | (() => D)): Repeatable<Cases<D>> {
+export function union<D extends Definition>(productions: D | (() => D)): Repeatable<Cases<D>> {
     return typeof productions === "function" 
         ? new RecursiveImpl(() => new ChoiceImpl(productions)) 
         : new ChoiceImpl(() => productions)

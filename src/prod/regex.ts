@@ -29,6 +29,10 @@ export function word(w: string): RegEx {
     return charSeq(w)
 }
 
+export function words(w: string, ...ws: string[]): RegEx {
+    return concat(charSeq(w), ...ws.map(w => charSeq(w)))
+}
+
 export function charSeq(cs: string): RegEx {
     const regexes = [...cs].map(c => charFrom(c))
     return concat(regexes[0], ...regexes.slice(1))

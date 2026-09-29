@@ -61,10 +61,10 @@ describe("Grammar", () => {
             expect(g).to.satisfy(containmentOf(intLit))
         })
 
-        it("collects symbols wrapped in choices", () => {
+        it("collects symbols wrapped in unions", () => {
             const varExp = gram.production({id: identifier});
             const numExp = gram.production({val: intLit});
-            const exp = gram.choice({ v: varExp, n: numExp })
+            const exp = gram.union({ v: varExp, n: numExp })
             const g = new gram.Grammar(exp)
 
             expect(g).to.satisfy(containmentOf(exp))
@@ -129,34 +129,34 @@ describe("Grammar", () => {
             const tuple1 = gram.production({left: identifier, right: identifier.optional()})
             const tuple2 = gram.production({left: identifier.optional(), right: identifier})
             const tuple3 = gram.production({left: identifier, right: identifier})
-            const g = new gram.Grammar(gram.choice({ "1": tuple1, "2": tuple2, "3": tuple3 }))
+            const g = new gram.Grammar(gram.union({ "1": tuple1, "2": tuple2, "3": tuple3 }))
 
             expect(g.isOptional(tuple1)).to.be.false
             expect(g.isOptional(tuple2)).to.be.false
             expect(g.isOptional(tuple3)).to.be.false
         })
 
-        it("determines choices to be optional if any of its productions is optional", () => {
-            const choice1 = gram.choice({ id: gram.production( {id: identifier}), int: gram.production({val: intLit.optional()}) })
-            const choice2 = gram.choice({ id: gram.production( {id: identifier.optional()}), int: gram.production({val: intLit}) })
-            const choice3 = gram.choice({ id: gram.production( {id: identifier.optional()}), int: gram.production({val: intLit.optional()}) })
-            const g = new gram.Grammar(gram.production( {c1: choice1, c2: choice2, c3: choice3}))
+        it("determines unions to be optional if any of its productions is optional", () => {
+            const union1 = gram.union({ id: gram.production( {id: identifier}), int: gram.production({val: intLit.optional()}) })
+            const union2 = gram.union({ id: gram.production( {id: identifier.optional()}), int: gram.production({val: intLit}) })
+            const union3 = gram.union({ id: gram.production( {id: identifier.optional()}), int: gram.production({val: intLit.optional()}) })
+            const g = new gram.Grammar(gram.production( {c1: union1, c2: union2, c3: union3}))
 
-            expect(g.isOptional(choice1)).to.be.true
-            expect(g.isOptional(choice2)).to.be.true
-            expect(g.isOptional(choice3)).to.be.true
+            expect(g.isOptional(union1)).to.be.true
+            expect(g.isOptional(union2)).to.be.true
+            expect(g.isOptional(union3)).to.be.true
         })
 
-        it("determines choices to be non-optional if all its symbols are non-optional", () => {
-            const choice = gram.choice({ id: gram.production({id: identifier}), int: gram.production({val: intLit}) })
-            const g = new gram.Grammar(choice)
+        it("determines unions to be non-optional if all its symbols are non-optional", () => {
+            const union = gram.union({ id: gram.production({id: identifier}), int: gram.production({val: intLit}) })
+            const g = new gram.Grammar(union)
 
-            expect(g.isOptional(choice)).to.be.false
+            expect(g.isOptional(union)).to.be.false
         })
 
         it("works correctly even for indirectly recursive rules", () => {
-            const subR: gram.Repeatable = gram.choice(() => ({ num: intLit, rec: r }))
-            const r = gram.choice({ id: gram.production({ id: identifier.optional() }), subR })
+            const subR: gram.Repeatable = gram.union(() => ({ num: intLit, rec: r }))
+            const r = gram.union({ id: gram.production({ id: identifier.optional() }), subR })
 
             const g = new gram.Grammar(r)
 
@@ -195,14 +195,14 @@ describe("Grammar", () => {
             expect(g.firstSetOf(oneOrMore)).satisfies(aSetEqualTo(g.firstSetOf(identifier)))
         })
 
-        it("is the union of first sets of wrapped symbols, for a choice", () => {
-            const choice = gram.choice({
+        it("is the union of first sets of wrapped symbols, for a union", () => {
+            const union = gram.union({
                 id: gram.production({ name: identifier }),
                 int: gram.production({ value: intLit })
             });
-            const g = new gram.Grammar(choice)
+            const g = new gram.Grammar(union)
 
-            expect(g.firstSetOf(choice)).satisfies(aSetEqualTo(new Set([
+            expect(g.firstSetOf(union)).satisfies(aSetEqualTo(new Set([
                 ...g.firstSetOf(identifier),
                 ...g.firstSetOf(intLit),
             ])))
@@ -245,8 +245,8 @@ describe("Grammar", () => {
                     | { type: "rec", value: R } 
                   }
 
-            const subR: gram.Repeatable = gram.choice(() => ({ num: intLit, rec: r }))
-            const r = gram.choice({ id: identifier, subR })
+            const subR: gram.Repeatable = gram.union(() => ({ num: intLit, rec: r }))
+            const r = gram.union({ id: identifier, subR })
 
             const g = new gram.Grammar(r)
 
@@ -276,7 +276,7 @@ describe("Grammar", () => {
         }
 
         it("is EOF for start symbols", () => {
-            const g = wrap(gram.choice({ int: intLit, float: floatLit, id: identifier }))
+            const g = wrap(gram.union({ int: intLit, float: floatLit, id: identifier }))
             expect(g.followSetOf(g.start)).satisfies(aSetEqualTo(new Set([tokens.eof])))
         })
     
@@ -301,8 +301,8 @@ describe("Grammar", () => {
             expect(g.followSetOf(definition.int)).satisfies(aSetEqualTo(g.firstSetOf(definition.float)))
         })
 
-        it("propagates to all productions in a choice", () => {
-            const c = gram.choice({
+        it("propagates to all productions in a union", () => {
+            const c = gram.union({
                 "int": intLit,
                 "float": floatLit,
                 "id": identifier
@@ -347,7 +347,7 @@ describe("Grammar", () => {
                 ? ({ parenOpen: "(", parenClose: ")", ...n }) 
                 : ({ funName: null, parenOpen: "(", arg: n, parenClose: ")"})
         )
-        const factor = gram.choice({
+        const factor = gram.union({
             lit: floatLit,
             id: identifier,
             fun: funCall
@@ -405,7 +405,7 @@ describe("Grammar", () => {
             funName: identifier,
             param: param.optional()
         })
-        const factor = gram.choice({
+        const factor = gram.union({
             lit: floatLit,
             fun: funCall,
             parenthesized: param
@@ -432,10 +432,10 @@ describe("Grammar", () => {
             expect(problems).to.be.not.empty
         })
 
-        it("returns a problem when an choice symbol has productions sharing the same first symbols", () => {
+        it("returns a problem when an union symbol has productions sharing the same first symbols", () => {
             const g = new gram.Grammar(gram.production({
                 first: identifier,
-                choice: gram.choice({
+                union: gram.union({
                     prod1: identifier,
                     prod2: identifier,
                 }),
